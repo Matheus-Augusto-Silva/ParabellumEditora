@@ -14,7 +14,7 @@ import {
 import { ICommission } from '@/types';
 import DataFetchWrapper from '@/components/commons/DataFetching';
 
-const ComissionsPage: React.FC = () => {
+const CommissionsPage: React.FC = () => {
   const [allCommissions, setAllCommissions] = useState<ICommission[]>([]);
   const [pendingCommissions, setPendingCommissions] = useState<ICommission[]>([]);
   const [paidCommissions, setPaidCommissions] = useState<ICommission[]>([]);
@@ -444,4 +444,4 @@ const ComissionsPage: React.FC = () => {
   );
 };
 
-export default ComissionsPage;
+export default CommissionsPage;

@@ -7,11 +7,11 @@ export const getSalesStats = async (): Promise<ISaleStats> => {
 };
 
 export const getPendingCommissionsStats = async (): Promise<IPendingCommissions> => {
-  const response = await api.get('/commissions/pendingComissions');
+  const response = await api.get('/commissions/pendingCommissions');
   return response.data;
 };
 
 export const getPaidCommissionsStats = async (): Promise<IPaidCommissions> => {
-  const response = await api.get('/commissions/paidComissions');
+  const response = await api.get('/commissions/paidCommissions');
   return response.data;
 };

@@ -201,16 +201,16 @@ export const processCommission = async (
 };
 
 export const getPendingCommissions = async (): Promise<IPendingCommissions> => {
-  const response = await api.get(`${ENDPOINT}/pendingComissions`);
+  const response = await api.get(`${ENDPOINT}/pendingCommissions`);
   return response.data;
 };
 
 export const getPaidCommissions = async (): Promise<IPaidCommissions> => {
-  const response = await api.get(`${ENDPOINT}/paidComissions`);
+  const response = await api.get(`${ENDPOINT}/paidCommissions`);
   return response.data;
 };
 
 export const markCommissionAsPaid = async (id: string) => {
-  const response = await api.put(`${ENDPOINT}/${id}/payComission`);
+  const response = await api.put(`${ENDPOINT}/${id}/payCommission`);
   return response.data;
 };

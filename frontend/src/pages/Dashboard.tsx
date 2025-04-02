@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-/* import PageHeader from '@/components/layout/PageHeader'; */
+import PageHeader from '@/components/layout/PageHeader';
 import Card from '@/components/commons/Card';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '@/utils/formatters';
@@ -72,10 +72,10 @@ const Dashboard: React.FC = () => {
 
   return (
     <div>
-      {/*   <PageHeader
+      <PageHeader
         title="Dashboard"
         subtitle="Visão geral do sistema de vendas de livros"
-      /> */}
+      />
 
       <DataFetchWrapper
         loading={loading}

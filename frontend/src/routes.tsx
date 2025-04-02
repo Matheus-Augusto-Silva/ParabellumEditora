@@ -6,7 +6,7 @@ import Dashboard from '@/pages/Dashboard';
 import BooksPage from '@/pages/BooksPage';
 import AuthorsPage from '@/pages/AuthorsPage';
 import SalesPage from '@/pages/SalesPage';
-import CommissionsPage from '@/pages/ComissionsPage';
+import CommissionsPage from '@/pages/CommissionsPage';
 import NotFound from '@/pages/NotFoundPage';
 
 const AppRoutes: React.FC = () => {
