@@ -11,7 +11,15 @@ const saleSchema: Schema = new mongoose.Schema(
     platform: {
       type: String,
       required: [true, 'A plataforma é obrigatória'],
-      enum: ['WooCommerce', 'Amazon', 'Livraria Cultura', 'Kobo', 'Google Books', 'Editora Direta', 'Feiras Literárias', 'OtherPlatform']
+      enum: [
+        'Amazon',
+        'Apple Books',
+        'Google Play',
+        'Kobo',
+        'Site da Editora',
+        'Livraria Física',
+        'Outro'
+      ]
     },
     saleDate: {
       type: Date,
@@ -51,6 +59,6 @@ saleSchema.set('toJSON', {
   }
 });
 
-const Sale = mongoose.model < ISale > ('Sale', saleSchema);
+const Sale = mongoose.model<ISale>('Sale', saleSchema);
 
 export default Sale;

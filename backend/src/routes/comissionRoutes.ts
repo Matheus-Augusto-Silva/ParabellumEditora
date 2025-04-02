@@ -14,10 +14,10 @@ router.route('/')
   .get(getCommissions)
   .post(calculateCommission);
 
-router.route('/pendingComissions')
+router.route('/pendingCommissions')
   .get(getPendingCommissions);
 
-router.route('/paidComissions')
+router.route('/paidCommissions')
   .get(getPaidCommissions);
 
 router.route('/:id')

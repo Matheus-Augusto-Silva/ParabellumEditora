@@ -85,7 +85,6 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
   const customPlatforms = [
     'Amazon',
     'Apple Books',
-    'Barnes & Noble',
     'Google Play',
     'Kobo',
     'Site da Editora',
