@@ -6,7 +6,7 @@ import {
   getCommissionById,
   calculateCommission,
   markCommissionAsPaid
-} from '../controllers/comissionController';
+} from '../controllers/commissionController';
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ router.route('/paidCommissions')
 router.route('/:id')
   .get(getCommissionById);
 
-router.route('/:id/payComission')
+router.route('/:id/payCommission')
   .put(markCommissionAsPaid);
 
 router.route('/author/:id/calculate')

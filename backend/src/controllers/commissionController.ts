@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import asyncHandler from 'express-async-handler';
-import Commission from '../models/Comission';
+import Commission from '../models/Commission';
 import Author from '../models/Author';
 import Book from '../models/Book';
 import Sale from '../models/Sale';

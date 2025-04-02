@@ -9,7 +9,7 @@ import { notFound, errorHandler } from './middleware/errorMiddleware';
 import authorRoutes from './routes/authorRoutes';
 import bookRoutes from './routes/bookRoutes';
 import saleRoutes from './routes/saleRoutes';
-import commissionRoutes from './routes/comissionRoutes';
+import commissionRoutes from './routes/commissionRoutes';
 
 dotenv.config();
 
