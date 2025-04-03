@@ -101,7 +101,7 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
 
   if (sales.length === 0) {
     res.status(404);
-    throw new Error('Não há vendas pendentes para o período selecionado');
+    throw new Error('Não há vendas pendentes de cálculo de comissão para o período selecionado');
   }
 
   let totalSalesAmount = 0;
@@ -173,3 +173,87 @@ export const markCommissionAsPaid = asyncHandler(async (req: Request, res: Respo
     commission: updatedCommission
   });
 });
+
+export const deleteCommission = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const commission = await Commission.findById(req.params.id);
+
+    if (!commission) {
+      res.status(404).json({ message: 'Comissão não encontrada' });
+      return;
+    }
+
+    if (commission.isPaid) {
+      res.status(400).json({
+        message: 'Não é possível excluir uma comissão que já foi paga'
+      });
+      return;
+    }
+
+    const salesIds = commission.sales;
+
+    if (salesIds && salesIds.length > 0) {
+      await Sale.updateMany(
+        { _id: { $in: salesIds } },
+        { $set: { isProcessed: false, commission: null } }
+      );
+    }
+    await Commission.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      message: 'Comissão excluída com sucesso e vendas liberadas',
+      salesCount: salesIds.length
+    });
+  } catch (error: any) {
+    console.error('Erro ao excluir comissão:', error);
+    res.status(500).json({
+      message: 'Erro ao excluir comissão',
+      error: error.message
+    });
+  }
+};
+
+export const updateCommission = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const commission = await Commission.findById(req.params.id);
+
+    if (!commission) {
+      res.status(404).json({ message: 'Comissão não encontrada' });
+      return;
+    }
+
+    if (commission.isPaid) {
+      res.status(400).json({
+        message: 'Não é possível editar uma comissão que já foi paga'
+      });
+      return;
+    }
+
+    const allowedUpdates = [
+      'commissionRate',
+      'commissionAmount',
+      'notes'
+    ];
+
+    const updates: any = {};
+    Object.keys(req.body).forEach(key => {
+      if (allowedUpdates.includes(key)) {
+        updates[key] = req.body[key];
+      }
+    });
+
+    const updatedCommission = await Commission.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true }
+    );
+
+    res.status(200).json(updatedCommission);
+  } catch (error: any) {
+    console.error('Erro ao atualizar comissão:', error);
+    res.status(500).json({
+      message: 'Erro ao atualizar comissão',
+      error: error.message
+    });
+  }
+};

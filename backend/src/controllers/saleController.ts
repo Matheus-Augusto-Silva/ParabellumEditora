@@ -6,6 +6,7 @@ import { ISaleStats } from '../types';
 import csv from 'csv-parser';
 import fs from 'fs';
 import path from 'path';
+import mongoose from 'mongoose';
 
 export const getSales = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const sales = await Sale.find({})
@@ -349,3 +350,53 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
     throw new Error(`Erro ao importar vendas: ${error instanceof Error ? error.message : String(error)}`);
   }
 });
+
+export const deleteSale = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const sale = await Sale.findById(req.params.id);
+
+  if (!sale) {
+    res.status(404);
+    throw new Error('Venda não encontrada');
+  }
+
+  if (sale.isProcessed) {
+    res.status(400);
+    throw new Error('Não é possível excluir uma venda que já foi processada em uma comissão');
+  }
+
+  await sale.remove();
+  res.json({ message: 'Venda removida com sucesso' });
+});
+
+export const getFilteredSales = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { author, startDate, endDate, processed } = req.query;
+
+    const filter: any = {};
+
+    if (author) {
+      filter['book.author._id'] = new mongoose.Types.ObjectId(author as string);
+    }
+
+    if (startDate && endDate) {
+      filter.saleDate = {
+        $gte: new Date(startDate as string),
+        $lte: new Date(endDate as string)
+      };
+    }
+
+    if (processed !== undefined) {
+      filter.isProcessed = processed === 'true';
+    }
+
+    const sales = await Sale.find(filter);
+
+    res.status(200).json(sales);
+  } catch (error: any) {
+    console.error('Erro ao filtrar vendas:', error);
+    res.status(500).json({
+      message: 'Erro ao filtrar vendas',
+      error: error.message
+    });
+  }
+};

@@ -20,9 +20,7 @@ export interface IBook extends Document {
   updatedAt: Date;
 }
 
-export type PlatformType = 'WooCommerce' | 'Amazon' | 'Livraria Cultura' |
-  'Kobo' | 'Google Books' | 'Editora Direta' | 'Feiras Literárias' | 'OtherPlatform';
-
+export type PlatformType = 'Amazon' | 'Mercado Livre' | 'Estante Virtual' | 'umLivro' | 'Carrefour' | 'Americanas' | 'Site da Editora' | 'Outra plataforma';
 export interface ISale extends Document {
   book: Types.ObjectId | IBook;
   platform: PlatformType;
@@ -33,6 +31,7 @@ export interface ISale extends Document {
   isProcessed: boolean;
   createdAt: Date;
   updatedAt: Date;
+  source?: string;
 }
 
 export interface ICommission extends Document {

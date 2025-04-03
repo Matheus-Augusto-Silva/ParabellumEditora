@@ -5,8 +5,10 @@ import {
   getSaleById,
   createSale,
   updateSale,
+  deleteSale,
   getSalesStats,
-  importSales
+  importSales,
+  getFilteredSales
 } from '../controllers/saleController';
 
 const storage = multer.memoryStorage();
@@ -24,11 +26,15 @@ router.route('/')
 router.route('/stats')
   .get(getSalesStats);
 
+router.route('/filter')
+  .get(getFilteredSales);
+
 router.route('/import')
   .post(upload.single('file'), importSales);
 
 router.route('/:id')
   .get(getSaleById)
-  .put(updateSale);
+  .put(updateSale)
+  .delete(deleteSale);
 
 export default router;

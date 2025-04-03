@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ISale, PlatformType } from '../types';
+import { ISale } from '../types';
 
 const saleSchema: Schema = new mongoose.Schema(
   {
@@ -13,12 +13,13 @@ const saleSchema: Schema = new mongoose.Schema(
       required: [true, 'A plataforma é obrigatória'],
       enum: [
         'Amazon',
-        'Apple Books',
-        'Google Play',
-        'Kobo',
+        'Mercado Livre',
+        'Estante Virtual',
+        'umLivro',
+        'Carrefour',
+        'Americanas',
         'Site da Editora',
-        'Livraria Física',
-        'Outro'
+        'Outra plataforma'
       ]
     },
     saleDate: {
