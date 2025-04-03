@@ -40,7 +40,7 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
       setQuantity(sale.quantity);
       setSalePrice(sale.salePrice);
       setSaleDate(new Date(sale.saleDate).toISOString().split('T')[0]);
-      setSource(sale.source || 'editora'); // Use o valor existente ou padrão para 'editora'
+      setSource(sale.source === 'parceira' || sale.source === 'editora' ? sale.source : 'editora');
     } else {
       setSaleDate(new Date().toISOString().split('T')[0]);
     }
@@ -77,19 +77,20 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
       onSave();
     } catch (error: any) {
       console.error('Erro ao salvar venda:', error);
-      setError('Falha ao salvar a venda. Por favor, tente novamente.');
+      setError(error.response?.data?.message || 'Erro ao salvar venda. Tente novamente.');
       setLoading(false);
     }
   };
 
   const customPlatforms = [
     'Amazon',
-    'Apple Books',
-    'Google Play',
-    'Kobo',
+    'Mercado Livre',
+    'Estante Virtual',
+    'umLivro',
+    'Carrefour',
+    'Americanas',
     'Site da Editora',
-    'Livraria Física',
-    'Outro'
+    'Outra plataforma'
   ];
 
   return (

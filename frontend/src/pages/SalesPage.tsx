@@ -8,7 +8,7 @@ import Alert from '@/components/commons/Alert';
 import SaleForm from '@/components/sales/SaleForm';
 import SaleImport from '@/components/sales/SaleImport';
 import { formatCurrency } from '@/utils/formatters';
-import { getSales, updateSale } from '@/services/saleService';
+import { deleteSale, getSales, updateSale } from '@/services/saleService';
 import { ISale } from '@/types';
 
 const SalesPage: React.FC = () => {
@@ -46,6 +46,34 @@ const SalesPage: React.FC = () => {
   useEffect(() => {
     filterSales();
   }, [searchTerm, dateFilter, platformFilter, allSales]);
+
+  const handleDeleteSale = async (id: string) => {
+    if (window.confirm('Tem certeza que deseja excluir esta venda? Esta ação não pode ser desfeita.')) {
+      try {
+        await deleteSale(id);
+        fetchSales();
+        setAlert({ type: 'success', message: 'Venda excluída com sucesso!' });
+
+        setTimeout(() => {
+          setAlert(null);
+        }, 5000);
+      } catch (error: any) {
+        console.error('Erro ao excluir venda:', error);
+
+        if (error.response && error.response.status === 400) {
+          setAlert({
+            type: 'error',
+            message: 'Não é possível excluir uma venda que já foi processada em uma comissão.'
+          });
+        } else {
+          setAlert({
+            type: 'error',
+            message: 'Erro ao excluir venda. Tente novamente.'
+          });
+        }
+      }
+    }
+  };
 
   const filterSales = () => {
     let filtered = [...allSales];
@@ -207,21 +235,45 @@ const SalesPage: React.FC = () => {
       accessor: '_id',
       render: (sale: ISale) => (
         <div className="flex space-x-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenFormModal(sale);
-            }}
-            disabled={sale.commission !== undefined}
-            className="flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Editar
-          </Button>
+          {!sale.commission && (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenFormModal(sale);
+                }}
+                className="flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Editar
+              </Button>
+
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteSale(sale._id);
+                }}
+                className="flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Excluir
+              </Button>
+            </>
+          )}
+
+          {sale.commission && (
+            <span className="text-xs text-gray-500">
+              Processada em comissão
+            </span>
+          )}
         </div>
       ),
     },
@@ -372,13 +424,18 @@ const SalesPage: React.FC = () => {
         onRetry={fetchSales}
       >
         <div className="bg-white overflow-hidden shadow rounded-lg">
-          <Table
-            columns={columns}
-            data={filteredSales}
-            keyExtractor={(sale) => sale._id}
-            onRowClick={(sale) => !sale.commission && handleOpenFormModal(sale)}
-            emptyMessage="Nenhuma venda encontrada."
-          />
+          {filteredSales.length === 0 ? (
+            <div className="text-center text-gray-500 py-4">
+              Nenhuma venda encontrada.
+            </div>
+          ) : (
+            <Table
+              columns={columns}
+              data={filteredSales}
+              keyExtractor={(sale) => sale._id}
+              onRowClick={(sale) => !sale.commission && handleOpenFormModal(sale)}
+            />
+          )}
         </div>
       </DataFetchWrapper>
 

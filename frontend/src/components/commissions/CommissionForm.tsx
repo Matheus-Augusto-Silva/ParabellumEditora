@@ -1,13 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import Input from '@/components/commons/Input';
 import Select from '@/components/commons/Select';
 import Button from '@/components/commons/Button';
 import Alert from '@/components/commons/Alert';
 import { getAuthors } from '@/services/authorService';
-import { calculateCommission } from '@/services/commissionService';
+import { processCommission } from '@/services/commissionService';
 import { IAuthor } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
+import { formatDateToISO } from '@/utils/dateUils';
 
 interface CommissionFormProps {
   onSuccess: () => void;
@@ -41,8 +41,15 @@ const CommissionForm: React.FC<CommissionFormProps> = ({ onSuccess, onCancel }) 
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-    setStartDate(firstDay.toISOString().split('T')[0]);
-    setEndDate(lastDay.toISOString().split('T')[0]);
+    const formatDate = (date: Date) => {
+      if (typeof formatDateToISO === 'function') {
+        return formatDateToISO(date);
+      }
+      return date.toISOString().split('T')[0];
+    };
+
+    setStartDate(formatDate(firstDay));
+    setEndDate(formatDate(lastDay));
   }, []);
 
   const validate = (): boolean => {
@@ -77,12 +84,18 @@ const CommissionForm: React.FC<CommissionFormProps> = ({ onSuccess, onCancel }) 
 
     setLoading(true);
     try {
-      const result = await calculateCommission([], authorId, startDate, endDate);
+      const result = await processCommission(
+        authorId,
+        startDate,
+        endDate
+      );
+
       setSuccess({
         message: 'Comissão calculada com sucesso!',
         salesCount: result.salesCount,
-        amount: result.commission.commissionAmount
+        amount: result.authorCommission
       });
+
       setLoading(false);
       setTimeout(() => {
         onSuccess();
@@ -90,7 +103,10 @@ const CommissionForm: React.FC<CommissionFormProps> = ({ onSuccess, onCancel }) 
     } catch (error: any) {
       if (error.response && error.response.status === 404) {
         setError('Não há vendas pendentes para o período selecionado.');
+      } else if (error.message === 'Nenhuma venda encontrada para o período selecionado.') {
+        setError('Não há vendas pendentes para o período selecionado.');
       } else {
+        console.error('Erro ao calcular comissão:', error);
         setError('Ocorreu um erro ao calcular a comissão. Tente novamente.');
       }
       setLoading(false);

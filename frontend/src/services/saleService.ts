@@ -21,6 +21,11 @@ export const updateSale = async (id: string, saleData: Partial<ISale>): Promise<
   return response.data;
 };
 
+export const deleteSale = async (id: string) => {
+  const response = await api.delete(`/sales/${id}`);
+  return response.data;
+};
+
 export const getSalesStats = async (): Promise<ISaleStats> => {
   const response = await api.get('/sales/stats');
   return response.data;

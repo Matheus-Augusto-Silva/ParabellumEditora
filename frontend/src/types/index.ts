@@ -34,10 +34,11 @@ export interface ISale {
   saleDate: string;
   quantity: number;
   salePrice: number;
-  source: 'parceira' | 'editora';
+  source?: string;
   commission?: string;
   createdAt?: string;
   updatedAt?: string;
+
 }
 
 export interface ICommission {
@@ -46,6 +47,7 @@ export interface ICommission {
   startDate: string;
   endDate: string;
   commissionAmount: number;
+  commissionRate: number;
   totalSales: number;
   isPaid: boolean;
   paymentDate?: string;
@@ -91,11 +93,13 @@ export interface ISaleStats {
 }
 
 export interface IPendingCommissions {
+  commissions: never[];
   pendingCommissions: ICommission[];
   totalPending: number;
 }
 
 export interface IPaidCommissions {
+  commissions: never[];
   paidCommissions: ICommission[];
   totalPaid: number;
 }

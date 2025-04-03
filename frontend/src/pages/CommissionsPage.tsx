@@ -1,55 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/commons/Button';
-import Alert from '@/components/commons/Alert';
 import Modal from '@/components/commons/Modal';
+import CommissionForm from '@/components/commissions/CommissionForm';
+import CommissionList from '@/components/commissions/CommissionList';
+import { getPendingCommissions, getPaidCommissions, markCommissionAsPaid } from '@/services/commissionService';
+import Alert from '@/components/commons/Alert';
+import Container from '@/components/commons/Container';
 import Card from '@/components/commons/Card';
-import CommissionForm from '@/components/comissions/CommissionForm';
-import { formatCurrency } from '@/utils/formatters';
-import {
-  getPendingCommissions,
-  getPaidCommissions,
-  markCommissionAsPaid
-} from '@/services/commissionService';
-import { ICommission } from '@/types';
 import DataFetchWrapper from '@/components/commons/DataFetching';
 
 const CommissionsPage: React.FC = () => {
-  const [allCommissions, setAllCommissions] = useState<ICommission[]>([]);
-  const [pendingCommissions, setPendingCommissions] = useState<ICommission[]>([]);
-  const [paidCommissions, setPaidCommissions] = useState<ICommission[]>([]);
-  const [totalPending, setTotalPending] = useState<number>(0);
-  const [totalPaid, setTotalPaid] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<'pending' | 'paid'>('pending');
+  const [pendingCommissions, setPendingCommissions] = useState<any[]>([]);
+  const [paidCommissions, setPaidCommissions] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [showNewCommissionModal, setShowNewCommissionModal] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [isFormModalOpen, setIsFormModalOpen] = useState<boolean>(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
-  const [selectedCommission, setSelectedCommission] = useState<ICommission | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'paid'>('all');
-  const [alert, setAlert] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<string>('transfer');
-  const [paymentNotes, setPaymentNotes] = useState<string>('');
-  const [isMarkingAsPaid, setIsMarkingAsPaid] = useState<boolean>(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [markingAsPaid, setMarkingAsPaid] = useState<boolean>(false);
 
   const fetchCommissions = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
+      const [pendingData, paidData] = await Promise.all([
+        getPendingCommissions(),
+        getPaidCommissions()
+      ]);
 
-      const pendingData = await getPendingCommissions();
-      setPendingCommissions(pendingData.pendingCommissions);
-      setTotalPending(pendingData.totalPending);
+      console.log("Pending commissions raw data:", pendingData);
+      console.log("Paid commissions raw data:", paidData);
 
-      const paidData = await getPaidCommissions();
-      setPaidCommissions(paidData.paidCommissions);
-      setTotalPaid(paidData.totalPaid);
+      const pendingArray = pendingData && pendingData.pendingCommissions
+        ? pendingData.pendingCommissions
+        : [];
 
-      setAllCommissions([...pendingData.pendingCommissions, ...paidData.paidCommissions]);
-    } catch (error: any) {
-      setError('Falha ao carregar as comissões. Por favor, tente novamente.');
+      const paidArray = paidData && paidData.paidCommissions
+        ? paidData.paidCommissions
+        : [];
+
+      console.log("Setting pending commissions:", pendingArray);
+      console.log("Setting paid commissions:", paidArray);
+
+      setPendingCommissions(pendingArray);
+      setPaidCommissions(paidArray);
+      setLoading(false);
+    } catch (error) {
       console.error('Erro ao carregar comissões:', error);
-    } finally {
+      setError('Erro ao carregar dados de comissões. Tente recarregar a página.');
       setLoading(false);
     }
   };
@@ -58,389 +55,138 @@ const CommissionsPage: React.FC = () => {
     fetchCommissions();
   }, []);
 
-  const handleOpenFormModal = () => {
-    setIsFormModalOpen(true);
-  };
-
-  const handleCloseFormModal = () => {
-    setIsFormModalOpen(false);
-  };
-
-  const handleOpenPaymentModal = (commission: ICommission) => {
-    setSelectedCommission(commission);
-    setPaymentMethod('transfer');
-    setPaymentNotes('');
-    setIsPaymentModalOpen(true);
-  };
-
-  const handleClosePaymentModal = () => {
-    setIsPaymentModalOpen(false);
-    setSelectedCommission(null);
-  };
-
-  const handleFormSuccess = () => {
+  const handleCommissionCreated = () => {
+    setShowNewCommissionModal(false);
+    setSuccess('Comissão calculada com sucesso!');
     fetchCommissions();
-    handleCloseFormModal();
-    setAlert({
-      type: 'success',
-      message: 'Comissão calculada com sucesso!'
-    });
 
     setTimeout(() => {
-      setAlert(null);
-    }, 5000);
+      setSuccess(null);
+    }, 3000);
   };
 
-  const handleMarkAsPaid = async () => {
-    if (!selectedCommission) return;
+  const handleCommissionPaid = async (id: string) => {
+    if (markingAsPaid) return;
 
+    setMarkingAsPaid(true);
     try {
-      setIsMarkingAsPaid(true);
-      await markCommissionAsPaid(selectedCommission._id);
+      await markCommissionAsPaid(id);
+      setSuccess('Comissão marcada como paga com sucesso!');
       fetchCommissions();
-      handleClosePaymentModal();
-      setAlert({ type: 'success', message: 'Comissão marcada como paga com sucesso!' });
 
       setTimeout(() => {
-        setAlert(null);
-      }, 5000);
+        setSuccess(null);
+      }, 3000);
     } catch (error) {
       console.error('Erro ao marcar comissão como paga:', error);
-      setAlert({ type: 'error', message: 'Erro ao processar o pagamento. Tente novamente.' });
+      setError('Erro ao marcar comissão como paga. Tente novamente.');
     } finally {
-      setIsMarkingAsPaid(false);
+      setMarkingAsPaid(false);
     }
   };
 
-  const getFilteredCommissions = () => {
-    let data: ICommission[] = [];
-
-    switch (activeTab) {
-      case 'pending':
-        data = pendingCommissions;
-        break;
-      case 'paid':
-        data = paidCommissions;
-        break;
-      default:
-        data = allCommissions;
-        break;
+  const renderTabContent = () => {
+    if (activeTab === 'pending') {
+      return (
+        <CommissionList
+          commissions={pendingCommissions}
+          onCommissionPaid={handleCommissionPaid}
+          onCommissionDeleted={fetchCommissions}
+          onCommissionUpdated={fetchCommissions}
+          showPaidButton={true}
+        />
+      );
+    } else {
+      return (
+        <CommissionList
+          commissions={paidCommissions}
+          showPaidButton={false}
+        />
+      );
     }
-
-    if (searchTerm.trim() === '') {
-      return data;
-    }
-
-    const term = searchTerm.toLowerCase().trim();
-    return data.filter(comm =>
-      (typeof comm.author === 'object' && comm.author.name.toLowerCase().includes(term))
-    );
-  };
-
-  const filteredCommissions = getFilteredCommissions();
-
-  const formatDateRange = (startDate: string, endDate: string) => {
-    return `${new Date(startDate).toLocaleDateString('pt-BR')} - ${new Date(endDate).toLocaleDateString('pt-BR')}`;
-  };
-
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-red-100 text-red-800',
-      'bg-yellow-100 text-yellow-800',
-      'bg-green-100 text-green-800',
-      'bg-blue-100 text-blue-800',
-      'bg-indigo-100 text-indigo-800',
-      'bg-purple-100 text-purple-800',
-      'bg-pink-100 text-pink-800'
-    ];
-
-    const charSum = name.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-    return colors[charSum % colors.length];
-  };
-
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(part => part[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2);
   };
 
   return (
-    <div>
-      <PageHeader
-        title="Comissões"
-        subtitle="Gerencie as comissões dos autores"
-        actions={
-          <Button
-            variant="primary"
-            onClick={handleOpenFormModal}
-            className="flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
-            </svg>
-            Calcular Nova Comissão
-          </Button>
-        }
-      />
+    <Container>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Gerenciamento de Comissões</h1>
+        <Button
+          variant="primary"
+          onClick={() => setShowNewCommissionModal(true)}
+        >
+          Calcular Nova Comissão
+        </Button>
+      </div>
 
-      {alert && (
+      {error && (
         <Alert
-          type={alert.type}
-          message={alert.message}
+          type="error"
+          message={error}
           className="mb-4"
-          onClose={() => setAlert(null)}
+          onClose={() => setError(null)}
         />
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-amber-100 text-sm font-medium mb-1">Comissões Pendentes</p>
-              <p className="text-2xl font-bold tracking-tight">
-                {formatCurrency(totalPending)}
-              </p>
-              <p className="text-amber-100 text-xs mt-2">
-                {pendingCommissions.length} comissões a serem pagas
-              </p>
-            </div>
-            <div className="bg-white bg-opacity-20 rounded-full p-3">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </Card>
+      {success && (
+        <Alert
+          type="success"
+          message={success}
+          className="mb-4"
+          onClose={() => setSuccess(null)}
+        />
+      )}
 
-        <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-emerald-100 text-sm font-medium mb-1">Comissões Pagas</p>
-              <p className="text-2xl font-bold tracking-tight">
-                {formatCurrency(totalPaid)}
-              </p>
-              <p className="text-emerald-100 text-xs mt-2">
-                {paidCommissions.length} comissões já pagas
-              </p>
-            </div>
-            <div className="bg-white bg-opacity-20 rounded-full p-3">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm mb-6">
-        <div className="border-b">
-          <div className="flex space-x-4 px-4">
+      <Card>
+        <div className="border-b border-gray-200 mb-4">
+          <nav className="flex -mb-px">
             <button
-              className={`py-4 px-2 focus:outline-none ${activeTab === 'all'
-                ? 'border-b-2 border-indigo-500 text-indigo-600 font-medium'
-                : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
-                }`}
-              onClick={() => setActiveTab('all')}
-            >
-              Todas
-            </button>
-            <button
-              className={`py-4 px-2 focus:outline-none ${activeTab === 'pending'
-                ? 'border-b-2 border-indigo-500 text-indigo-600 font-medium'
-                : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+              className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'pending'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               onClick={() => setActiveTab('pending')}
+              type="button"
             >
-              Pendentes
+              Comissões Pendentes
             </button>
             <button
-              className={`py-4 px-2 focus:outline-none ${activeTab === 'paid'
-                ? 'border-b-2 border-indigo-500 text-indigo-600 font-medium'
-                : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+              className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'paid'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               onClick={() => setActiveTab('paid')}
+              type="button"
             >
-              Pagas
+              Comissões Pagas
             </button>
-          </div>
+          </nav>
         </div>
 
-        <div className="p-4">
-          <div className="relative rounded-md shadow-sm">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
-              placeholder="Buscar por autor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
-      <DataFetchWrapper
-        loading={loading}
-        error={error}
-        isEmpty={filteredCommissions.length === 0}
-        emptyMessage="Nenhuma comissão encontrada. Clique no botão para calcular uma nova comissão."
-        onRetry={fetchCommissions}
-      >
-        <div className="space-y-4">
-          {filteredCommissions.map((commission) => (
-            <div key={commission._id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-              <div className="p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                  <div className="flex items-center mb-4 sm:mb-0">
-                    <div className={`flex-shrink-0 h-12 w-12 rounded-full flex items-center justify-center text-lg font-medium ${typeof commission.author === 'object' ? getAvatarColor(commission.author.name) : ''}`}>
-                      {typeof commission.author === 'object' ? getInitials(commission.author.name) : 'NA'}
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {typeof commission.author === 'object' ? commission.author.name : 'Autor não disponível'}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {formatDateRange(commission.startDate, commission.endDate)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end">
-                    <p className="text-xl font-bold text-gray-900">{formatCurrency(commission.commissionAmount)}</p>
-                    <span className={`mt-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${commission.isPaid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                      {commission.isPaid ? 'Paga' : 'Pendente'}
-                      {commission.paymentDate && ` em ${new Date(commission.paymentDate).toLocaleDateString('pt-BR')}`}
-                    </span>
-                  </div>
-                </div>
-
-                {!commission.isPaid && (
-                  <div className="mt-4 flex justify-end">
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={() => handleOpenPaymentModal(commission)}
-                      className="flex items-center"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Marcar como Paga
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </DataFetchWrapper>
+        <DataFetchWrapper
+          loading={loading}
+          error={error}
+          isEmpty={activeTab === 'pending' ? pendingCommissions.length === 0 : paidCommissions.length === 0}
+          emptyMessage={activeTab === 'pending'
+            ? "Não há comissões pendentes. Calcule uma nova comissão."
+            : "Não há comissões pagas."
+          }
+          onRetry={fetchCommissions}
+        >
+          {renderTabContent()}
+        </DataFetchWrapper>
+      </Card>
 
       <Modal
-        isOpen={isFormModalOpen}
-        onClose={handleCloseFormModal}
-        title="Calcular Comissão"
+        isOpen={showNewCommissionModal}
+        title="Calcular Nova Comissão"
+        onClose={() => setShowNewCommissionModal(false)}
       >
         <CommissionForm
-          onSuccess={handleFormSuccess}
-          onCancel={handleCloseFormModal}
+          onSuccess={handleCommissionCreated}
+          onCancel={() => setShowNewCommissionModal(false)}
         />
       </Modal>
-
-      <Modal
-        isOpen={isPaymentModalOpen}
-        onClose={handleClosePaymentModal}
-        title="Confirmar Pagamento"
-      >
-        {selectedCommission && (
-          <div className="p-4">
-            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-yellow-700">
-                    Você está prestes a marcar esta comissão como paga. Esta ação não pode ser desfeita.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-4 bg-gray-50 p-4 rounded-lg">
-              <h4 className="text-lg font-medium text-gray-900 mb-2">Detalhes da Comissão</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Autor</p>
-                  <p className="font-medium">{typeof selectedCommission.author === 'object' ? selectedCommission.author.name : 'Autor não disponível'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Período</p>
-                  <p className="font-medium">{formatDateRange(selectedCommission.startDate, selectedCommission.endDate)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Valor</p>
-                  <p className="font-medium">{formatCurrency(selectedCommission.commissionAmount)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Data de Pagamento</p>
-                  <p className="font-medium">{new Date().toLocaleDateString('pt-BR')}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Método de Pagamento</label>
-              <select
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-              >
-                <option value="transfer">Transferência Bancária</option>
-                <option value="pix">Pix</option>
-                <option value="check">Cheque</option>
-              </select>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Observações (opcional)</label>
-              <textarea
-                rows={3}
-                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                placeholder="Adicione observações sobre este pagamento..."
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
-              ></textarea>
-            </div>
-
-            <div className="flex justify-end space-x-2 mt-4">
-              <Button
-                variant="secondary"
-                onClick={handleClosePaymentModal}
-                disabled={isMarkingAsPaid}
-              >
-                Cancelar
-              </Button>
-              <Button
-                variant="success"
-                onClick={handleMarkAsPaid}
-                disabled={isMarkingAsPaid}
-              >
-                {isMarkingAsPaid ? 'Processando...' : 'Confirmar Pagamento'}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-    </div>
+    </Container>
   );
 };
 

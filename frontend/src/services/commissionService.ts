@@ -21,7 +21,9 @@ interface ISaleWithSource {
 
 interface ICommissionCalculation {
   salesCount: number;
-  commission: any;
+  commission: {
+    commissionAmount: number;
+  };
   authorId: string;
   startDate: string;
   endDate: string;
@@ -54,7 +56,9 @@ interface ICommissionSaveRequest {
   authorId: string;
   startDate: string;
   endDate: string;
+  notes?: string;
   commissionAmount: number;
+  commissionRate?: number;
   totalSales: number;
   salesCount: number;
   salesIds: string[];
@@ -69,7 +73,7 @@ export const getSalesByAuthorAndDateRange = async (
 ): Promise<ISaleWithSource[]> => {
   try {
     const response = await api.get(
-      `/api/sales/filter?author=${authorId}&startDate=${startDate}&endDate=${endDate}&processed=false`
+      `/sales/filter?author=${authorId}&startDate=${startDate}&endDate=${endDate}&processed=false`
     );
     return response.data;
   } catch (error) {
@@ -78,7 +82,7 @@ export const getSalesByAuthorAndDateRange = async (
   }
 };
 
-export const calculateCommission = (sales: ISaleWithSource[], authorId: string, startDate: string, endDate: string): ICommissionCalculation => {
+export const calculateLocalCommission = (sales: ISaleWithSource[], authorId: string, startDate: string, endDate: string): ICommissionCalculation => {
   const result: ICommissionCalculation = {
     authorId,
     startDate,
@@ -106,8 +110,10 @@ export const calculateCommission = (sales: ISaleWithSource[], authorId: string, 
       }
     },
     salesIds: [],
-    salesCount: 0,
-    commission: undefined
+    salesCount: sales.length,
+    commission: {
+      commissionAmount: 0
+    }
   };
 
   sales.forEach((sale) => {
@@ -156,17 +162,9 @@ export const calculateCommission = (sales: ISaleWithSource[], authorId: string, 
     }
   });
 
-  return result;
-};
+  result.commission.commissionAmount = result.authorCommission;
 
-export const saveCommission = async (commissionData: ICommissionSaveRequest) => {
-  try {
-    const response = await api.post(`${ENDPOINT}`, commissionData);
-    return response.data;
-  } catch (error) {
-    console.error('Erro ao salvar comissão:', error);
-    throw error;
-  }
+  return result;
 };
 
 export const processCommission = async (
@@ -181,9 +179,9 @@ export const processCommission = async (
       throw new Error('Nenhuma venda encontrada para o período selecionado.');
     }
 
-    const calculation = calculateCommission(sales, authorId, startDate, endDate);
+    const calculation = calculateLocalCommission(sales, authorId, startDate, endDate);
 
-    await saveCommission({
+    const savedCommission = await saveCommission({
       authorId: calculation.authorId,
       startDate: calculation.startDate,
       endDate: calculation.endDate,
@@ -193,6 +191,10 @@ export const processCommission = async (
       salesIds: calculation.salesIds
     });
 
+    calculation.commission = {
+      commissionAmount: savedCommission.commissionAmount
+    };
+
     return calculation;
   } catch (error) {
     console.error('Erro ao processar comissão:', error);
@@ -200,17 +202,69 @@ export const processCommission = async (
   }
 };
 
+export const saveCommission = async (commissionData: ICommissionSaveRequest) => {
+  try {
+    const response = await api.post(`${ENDPOINT}`, commissionData);
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao salvar comissão:', error);
+    throw error;
+  }
+};
+
 export const getPendingCommissions = async (): Promise<IPendingCommissions> => {
-  const response = await api.get(`${ENDPOINT}/pendingCommissions`);
-  return response.data;
+  try {
+    const response = await api.get(`${ENDPOINT}/pendingCommissions`);
+    console.log("Resposta pendingCommissions:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao buscar comissões pendentes:', error);
+    throw error;
+  }
 };
 
 export const getPaidCommissions = async (): Promise<IPaidCommissions> => {
-  const response = await api.get(`${ENDPOINT}/paidCommissions`);
-  return response.data;
+  try {
+    const response = await api.get(`${ENDPOINT}/paidCommissions`);
+    console.log("Resposta paidCommissions:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao buscar comissões pagas:', error);
+    throw error;
+  }
 };
 
 export const markCommissionAsPaid = async (id: string) => {
   const response = await api.put(`${ENDPOINT}/${id}/payCommission`);
   return response.data;
+};
+
+export const deleteCommission = async (id: string) => {
+  try {
+    const response = await api.delete(`${ENDPOINT}/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao excluir comissão:', error);
+    throw error;
+  }
+};
+
+export const getCommissionById = async (id: string) => {
+  try {
+    const response = await api.get(`${ENDPOINT}/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao buscar comissão por ID:', error);
+    throw error;
+  }
+};
+
+export const updateCommission = async (id: string, commissionData: Partial<ICommissionSaveRequest>) => {
+  try {
+    const response = await api.put(`${ENDPOINT}/${id}`, commissionData);
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao atualizar comissão:', error);
+    throw error;
+  }
 };
