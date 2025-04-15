@@ -1,172 +1,304 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import Button from '@/components/commons/Button';
 import { importSales } from '@/services/saleService';
+import { toast } from 'react-toastify';
+import Alert from '@/components/commons/Alert';
+import BookForm from '@/components/books/BookForm';
+import Modal from '@/components/commons/Modal';
 
-interface SaleImportProps {
+const SaleImport: React.FC<{
   onCancel: () => void;
   onSuccess: () => void;
-}
-
-const SaleImport: React.FC<SaleImportProps> = ({ onCancel, onSuccess }) => {
+}> = ({ onCancel, onSuccess }) => {
   const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
   const [source, setSource] = useState<'parceira' | 'editora'>('editora');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    message: string;
+    notFoundBooks?: string[];
+    duplicateSales?: string[];
+    errors?: string[];
+  } | null>(null);
+  const [showBookForm, setShowBookForm] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const selectedFile = e.target.files[0];
-
-      if (!selectedFile.name.endsWith('.csv') &&
-        !selectedFile.name.endsWith('.xlsx') &&
-        !selectedFile.name.endsWith('.xls')) {
-        setError('Por favor, selecione um arquivo CSV ou Excel.');
-        setFile(null);
-        return;
-      }
-
-      setFile(selectedFile);
-      setError(null);
+      setFile(e.target.files[0]);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!file) return;
 
-    if (!file) {
-      setError('Por favor, selecione um arquivo para importar.');
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const validExtensions = ['csv', 'xlsx', 'xls'];
+
+    if (!fileExtension || !validExtensions.includes(fileExtension)) {
+      toast.error('Formato de arquivo inválido. Por favor, envie um arquivo CSV ou Excel (XLSX/XLS).');
       return;
     }
 
+    setLoading(true);
+    setImportResult(null);
+
     try {
-      setLoading(true);
-      await importSales(file, source);
-      onSuccess();
-    } catch (error: any) {
+      const result = await importSales(file, source);
+      setImportResult({
+        success: true,
+        message: result.message,
+        notFoundBooks: result.notFoundBooks,
+        duplicateSales: result.duplicateSales,
+        errors: result.errors
+      });
+
+      if (!result.notFoundBooks && !result.duplicateSales && !result.errors) {
+        toast.success(result.message);
+        onSuccess();
+      }
+    } catch (error) {
       console.error('Erro ao importar vendas:', error);
-      setError('Falha ao importar as vendas. Por favor, verifique o formato do arquivo e tente novamente.');
+      setImportResult({
+        success: false,
+        message: 'Erro ao importar vendas. Tente novamente.'
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para manipular o clique no botão de selecionar arquivo
-  const handleBrowseClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+  const handleClose = () => {
+    if (importResult?.success &&
+      (!importResult.notFoundBooks || importResult.notFoundBooks.length === 0) &&
+      (!importResult.duplicateSales || importResult.duplicateSales.length === 0) &&
+      (!importResult.errors || importResult.errors.length === 0)) {
+      onSuccess();
+    } else {
+      onCancel();
     }
   };
 
+  const extractUniqueISBNs = () => {
+    if (!importResult?.notFoundBooks) return [];
+
+    const isbnPattern = /ISBN: ([0-9]{13})/;
+    const isbns = new Set();
+
+    importResult.notFoundBooks.forEach(book => {
+      const match = book.match(isbnPattern);
+      if (match && match[1]) {
+        isbns.add(match[1]);
+      }
+    });
+
+    return Array.from(isbns);
+  };
+
+  const countUniqueBooks = () => {
+    if (!importResult?.notFoundBooks) return 0;
+    return new Set(importResult.notFoundBooks.map(book => {
+      const titlePart = book.split(" (ISBN:")[0];
+      return titlePart;
+    })).size;
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="p-4">
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-4">
+    <div>
+      {importResult ? (
         <div>
-          <label htmlFor="source" className="block text-sm font-medium text-gray-700 mb-1">
-            Origem das Vendas <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="source"
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            value={source}
-            onChange={(e) => setSource(e.target.value as 'parceira' | 'editora')}
-            required
-          >
-            <option value="editora">Site/Editora (90% editora, 10% autor)</option>
-            <option value="parceira">Parceira (30% editora, 70% parceira)</option>
-          </select>
-          <p className="mt-1 text-xs text-gray-500">
-            Todas as vendas neste arquivo serão importadas com a mesma origem.
-          </p>
-        </div>
-
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-500 transition-colors">
-          <input
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            className="hidden"
-            onChange={handleFileChange}
-            ref={fileInputRef}
+          <Alert
+            type={importResult.success ? "success" : "error"}
+            message={importResult.message}
+            className="mb-4"
           />
 
-          <div className="space-y-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-
-            <div className="text-sm text-gray-600">
-              <button
-                type="button"
-                className="text-indigo-600 hover:text-indigo-500 font-medium"
-                onClick={handleBrowseClick}
-              >
-                Clique para selecionar
-              </button>
-              {' ou arraste e solte'}
+          {importResult.notFoundBooks && importResult.notFoundBooks.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Livros não encontrados ({countUniqueBooks()} livros únicos):
+              </h3>
+              <div className="bg-yellow-50 p-3 rounded border border-yellow-200 max-h-48 overflow-y-auto">
+                <ul className="list-disc pl-5 text-xs text-gray-600">
+                  {importResult.notFoundBooks.map((book, index) => (
+                    <li key={index}>{book}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="mt-2 flex justify-between items-center">
+                <p className="text-xs text-gray-500">
+                  Estes livros não puderam ser importados porque não foram encontrados no sistema.
+                </p>
+                <div className="flex space-x-2">
+                  <button
+                    className="text-xs text-indigo-600 hover:text-indigo-800 px-2 py-1 border border-indigo-300 rounded"
+                    onClick={() => {
+                      const isbns = extractUniqueISBNs();
+                      navigator.clipboard.writeText(isbns.join('\n'));
+                      toast.success('ISBNs copiados para a área de transferência!');
+                    }}
+                  >
+                    Copiar ISBNs
+                  </button>
+                  <button
+                    className="text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-1 rounded"
+                    onClick={() => setShowBookForm(true)}
+                  >
+                    Cadastrar Livros
+                  </button>
+                </div>
+              </div>
             </div>
+          )}
 
-            <p className="text-xs text-gray-500">
-              Arquivos CSV ou Excel (até 10MB)
+          {importResult.duplicateSales && importResult.duplicateSales.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Vendas já cadastradas ({importResult.duplicateSales.length}):
+              </h3>
+              <div className="bg-blue-50 p-3 rounded border border-blue-200 max-h-40 overflow-y-auto">
+                <ul className="list-disc pl-5 text-xs text-gray-600">
+                  {importResult.duplicateSales.map((sale, index) => (
+                    <li key={index}>{sale}</li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Estas vendas foram ignoradas porque já estão cadastradas no sistema.
+              </p>
+            </div>
+          )}
+
+          {importResult.errors && importResult.errors.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Erros durante a importação ({importResult.errors.length}):
+              </h3>
+              <div className="bg-red-50 p-3 rounded border border-red-200 max-h-40 overflow-y-auto">
+                <ul className="list-disc pl-5 text-xs text-gray-600">
+                  {importResult.errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Ocorreram erros durante o processamento destas linhas.
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={handleClose}>
+              Fechar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Origem das Vendas
+            </label>
+            <div className="flex space-x-4">
+              <div className="flex items-center">
+                <input
+                  type="radio"
+                  id="editora"
+                  name="source"
+                  value="editora"
+                  checked={source === 'editora'}
+                  onChange={() => setSource('editora')}
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
+                <label htmlFor="editora" className="ml-2 block text-sm text-gray-700">
+                  Vendas da Editora
+                </label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="radio"
+                  id="parceira"
+                  name="source"
+                  value="parceira"
+                  checked={source === 'parceira'}
+                  onChange={() => setSource('parceira')}
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
+                <label htmlFor="parceira" className="ml-2 block text-sm text-gray-700">
+                  Parceiros (Amazon, Mercado Livre, etc.)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Arquivo de Importação (CSV ou Excel)
+            </label>
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={handleFileChange}
+              className="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-md file:border-0
+                file:text-sm file:font-semibold
+                file:bg-indigo-50 file:text-indigo-700
+                hover:file:bg-indigo-100"
+              required
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              Formatos suportados: CSV, Excel (XLSX, XLS)
             </p>
           </div>
 
-          {file && (
-            <div className="mt-4 flex items-center justify-center text-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span className="text-green-600 font-medium">{file.name}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-blue-700">
-                O arquivo CSV deve conter as colunas: <span className="font-mono">book_id, platform, quantity, sale_price, sale_date</span>
-              </p>
-            </div>
+          <div className="flex justify-end space-x-3">
+            <Button
+              variant="secondary"
+              onClick={onCancel}
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={!file || loading}
+              className="flex items-center"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Importando...
+                </>
+              ) : (
+                'Importar'
+              )}
+            </Button>
           </div>
-        </div>
+        </form>
+      )}
 
-        <div className="pt-4 flex justify-end space-x-3">
-          <Button
-            variant="secondary"
-            onClick={onCancel}
-          >
-            Cancelar
-          </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={!file || loading}
-          >
-            {loading ? 'Importando...' : 'Importar Vendas'}
-          </Button>
-        </div>
-      </div>
-    </form>
+      <Modal
+        isOpen={showBookForm}
+        onClose={() => setShowBookForm(false)}
+        title="Cadastrar Novo Livro"
+      >
+        {showBookForm && (
+          <BookForm
+            book={null}
+            onCancel={() => setShowBookForm(false)}
+            onSave={() => {
+              setShowBookForm(false);
+              toast.success('Livro cadastrado com sucesso! Agora você pode importar a planilha novamente.');
+            }}
+          />
+        )}
+      </Modal>
+    </div>
   );
 };
 

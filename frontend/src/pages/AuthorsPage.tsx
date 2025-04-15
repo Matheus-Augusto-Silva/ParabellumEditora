@@ -90,7 +90,7 @@ const AuthorsPage: React.FC = () => {
         }, 5000);
       } catch (error) {
         console.error('Erro ao excluir autor:', error);
-        setAlert({ type: 'error', message: 'Erro ao excluir autor. Tente novamente.' });
+        setAlert({ type: 'error', message: 'Autor possui livro(s) cadastrado(s)' });
       }
     }
   };

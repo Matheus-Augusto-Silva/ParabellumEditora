@@ -44,6 +44,16 @@ const saleSchema: Schema = new mongoose.Schema(
     isProcessed: {
       type: Boolean,
       default: false
+    },
+    orderNumber: {
+      type: String,
+      trim: true,
+      index: true
+    },
+    source: {
+      type: String,
+      enum: ['editora', 'parceira'],
+      default: 'editora'
     }
   },
   {

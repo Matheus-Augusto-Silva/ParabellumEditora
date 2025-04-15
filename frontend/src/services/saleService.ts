@@ -31,7 +31,13 @@ export const getSalesStats = async (): Promise<ISaleStats> => {
   return response.data;
 };
 
-export const importSales = async (file: File, source: 'parceira' | 'editora' = 'editora'): Promise<{ message: string; salesCreated: ISale[] }> => {
+export const importSales = async (file: File, source: 'parceira' | 'editora' = 'editora'): Promise<{
+  message: string;
+  salesCreated: ISale[];
+  notFoundBooks?: string[];
+  duplicateSales?: string[];
+  errors?: string[];
+}> => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('source', source);

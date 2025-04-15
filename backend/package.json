@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "tsc --noEmitOnError false",
     "data:import": "ts-node seeder.ts",
     "data:destroy": "ts-node seeder.ts -d"
   },
