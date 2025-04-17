@@ -116,20 +116,20 @@ export const calculateLocalCommission = (sales: ISaleWithSource[], authorId: str
     }
   };
 
+  const authorRate = 0.1;
+
   sales.forEach((sale) => {
     const saleTotal = sale.quantity * sale.salePrice;
     result.totalSales += saleTotal;
     result.totalQuantity += sale.quantity;
     result.salesIds.push(sale._id);
 
-    if (sale.source === 'parceira') {
-      const editoraPercentage = 0.3;
-      const authorPercentage = 0.1;
+    const authorCommission = saleTotal * authorRate;
 
-      const editoraPart = saleTotal * editoraPercentage;
-      const authorCommission = editoraPart * authorPercentage;
-      const publisherRevenue = editoraPart * (1 - authorPercentage);
-      const partnerRevenue = saleTotal * (1 - editoraPercentage);
+    if (sale.source === 'parceira') {
+      const partnerRevenue = saleTotal * 0.7;
+      const publisherGross = saleTotal * 0.3;
+      const publisherRevenue = publisherGross - authorCommission;
 
       result.authorCommission += authorCommission;
       result.publisherRevenue += publisherRevenue;
@@ -142,17 +142,10 @@ export const calculateLocalCommission = (sales: ISaleWithSource[], authorId: str
       result.detail.parceira.publisherRevenue += publisherRevenue;
       result.detail.parceira.partnerRevenue += partnerRevenue;
     } else {
-      const editoraPercentage = 0.9;
-      const authorPercentage = 0.1;
-
-      const editoraPart = saleTotal * editoraPercentage;
-      const authorCommission = editoraPart * authorPercentage;
-      const publisherRevenue = editoraPart * (1 - authorPercentage);
-      const otherCosts = saleTotal * (1 - editoraPercentage);
+      const publisherRevenue = saleTotal * 0.9;
 
       result.authorCommission += authorCommission;
       result.publisherRevenue += publisherRevenue;
-      result.partnerRevenue += otherCosts;
 
       result.detail.editora.sales += 1;
       result.detail.editora.quantity += sale.quantity;

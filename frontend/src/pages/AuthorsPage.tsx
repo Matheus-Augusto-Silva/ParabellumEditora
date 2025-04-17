@@ -9,6 +9,7 @@ import AuthorList from '@/components/authors/AuthorList';
 import { formatCurrency } from '@/utils/formatters';
 import { getAuthors, getAuthorStats, deleteAuthor } from '@/services/authorService';
 import { IAuthor, IAuthorStats } from '@/types';
+import SearchFilter from '@/components/commons/SearchFilter';
 
 const AuthorsPage: React.FC = () => {
   const [allAuthors, setAllAuthors] = useState<IAuthor[]>([]);
@@ -22,6 +23,7 @@ const AuthorsPage: React.FC = () => {
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [statsLoading, setStatsLoading] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
 
   const fetchAuthors = async () => {
     try {
@@ -32,9 +34,9 @@ const AuthorsPage: React.FC = () => {
       setFilteredAuthors(data);
       setLoading(false);
     } catch (error: any) {
-      setError('Falha ao carregar os autores. Por favor, tente novamente.');
+      setError('Falha ao carregar os organizadores. Por favor, tente novamente.');
       setLoading(false);
-      console.error('Erro ao carregar autores:', error);
+      console.error('Erro ao carregar organizadores:', error);
     }
   };
 
@@ -43,17 +45,33 @@ const AuthorsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredAuthors(allAuthors);
-    } else {
+    filterAuthors();
+  }, [searchTerm, dateFilter, allAuthors]);
+
+  const filterAuthors = () => {
+    let filtered = [...allAuthors];
+
+    if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase().trim();
-      const filtered = allAuthors.filter(author =>
+      filtered = filtered.filter(author =>
         author.name.toLowerCase().includes(term) ||
         (author.email && author.email.toLowerCase().includes(term))
       );
-      setFilteredAuthors(filtered);
     }
-  }, [searchTerm, allAuthors]);
+
+    if (dateFilter.startDate && dateFilter.endDate) {
+      const startDate = new Date(dateFilter.startDate).setHours(0, 0, 0, 0);
+      const endDate = new Date(dateFilter.endDate).setHours(23, 59, 59, 999);
+
+      filtered = filtered.filter(author => {
+        if (!author.createdAt) return true;
+        const createdAt = new Date(author.createdAt).getTime();
+        return createdAt >= startDate && createdAt <= endDate;
+      });
+    }
+
+    setFilteredAuthors(filtered);
+  };
 
   const handleOpenModal = (author: IAuthor | null = null) => {
     setSelectedAuthor(author);
@@ -70,7 +88,7 @@ const AuthorsPage: React.FC = () => {
     fetchAuthors();
     setAlert({
       type: 'success',
-      message: selectedAuthor ? 'Autor atualizado com sucesso!' : 'Autor adicionado com sucesso!'
+      message: selectedAuthor ? 'Organizador atualizado com sucesso!' : 'Organizador adicionado com sucesso!'
     });
 
     setTimeout(() => {
@@ -79,18 +97,18 @@ const AuthorsPage: React.FC = () => {
   };
 
   const handleDeleteAuthor = async (id: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este autor?')) {
+    if (window.confirm('Tem certeza que deseja excluir este organizador?')) {
       try {
         await deleteAuthor(id);
         fetchAuthors();
-        setAlert({ type: 'success', message: 'Autor excluído com sucesso!' });
+        setAlert({ type: 'success', message: 'Organizador excluído com sucesso!' });
 
         setTimeout(() => {
           setAlert(null);
         }, 5000);
       } catch (error) {
-        console.error('Erro ao excluir autor:', error);
-        setAlert({ type: 'error', message: 'Autor possui livro(s) cadastrado(s)' });
+        console.error('Erro ao excluir organizador:', error);
+        setAlert({ type: 'error', message: 'Organizador possui livro(s) cadastrado(s)' });
       }
     }
   };
@@ -103,40 +121,21 @@ const AuthorsPage: React.FC = () => {
       setIsStatsModalOpen(true);
       setStatsLoading(false);
     } catch (error) {
-      setAlert({ type: 'error', message: 'Erro ao carregar estatísticas do autor' });
+      setAlert({ type: 'error', message: 'Erro ao carregar estatísticas do organizador' });
       setStatsLoading(false);
     }
   };
 
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-red-100 text-red-800',
-      'bg-yellow-100 text-yellow-800',
-      'bg-green-100 text-green-800',
-      'bg-blue-100 text-blue-800',
-      'bg-indigo-100 text-indigo-800',
-      'bg-purple-100 text-purple-800',
-      'bg-pink-100 text-pink-800'
-    ];
 
-    const charSum = name.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-    return colors[charSum % colors.length];
-  };
-
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(part => part[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2);
+  const handleDateFilterChange = (startDate: string, endDate: string) => {
+    setDateFilter({ startDate, endDate });
   };
 
   return (
     <div>
       <PageHeader
-        title="Autores"
-        subtitle="Gerencie os autores e suas comissões"
+        title="Organizadores"
+        subtitle="Gerencie os organizadores e suas comissões"
         actions={
           <Button
             variant="primary"
@@ -146,7 +145,7 @@ const AuthorsPage: React.FC = () => {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
             </svg>
-            Novo Autor
+            Novo Organizador
           </Button>
         }
       />
@@ -160,28 +159,21 @@ const AuthorsPage: React.FC = () => {
         />
       )}
 
-      <div className="mb-6">
-        <div className="relative rounded-md shadow-sm">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <input
-            type="text"
-            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 pr-4 py-2 sm:text-sm border-gray-300 rounded-md"
-            placeholder="Buscar por nome ou email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </div>
+      <SearchFilter
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Buscar por título, organizador ou ISBN..."
+        dateFilter={dateFilter}
+        onDateFilterChange={handleDateFilterChange}
+        showDateFilter={false}
+        className="mb-6"
+      />
 
       <DataFetchWrapper
         loading={loading}
         error={error}
         isEmpty={filteredAuthors.length === 0}
-        emptyMessage="Nenhum autor encontrado. Clique em 'Novo Autor' para adicionar."
+        emptyMessage="Nenhum organizador encontrado. Clique em 'Novo Organizador' para adicionar."
         onRetry={fetchAuthors}
       >
         <AuthorList
@@ -195,7 +187,7 @@ const AuthorsPage: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={selectedAuthor ? 'Editar Autor' : 'Novo Autor'}
+        title={selectedAuthor ? 'Editar Organizador' : 'Novo Organizador'}
       >
         <AuthorForm
           author={selectedAuthor}
@@ -207,7 +199,7 @@ const AuthorsPage: React.FC = () => {
       <Modal
         isOpen={isStatsModalOpen}
         onClose={() => setIsStatsModalOpen(false)}
-        title="Estatísticas do Autor"
+        title="Estatísticas do Organizador"
         size="lg"
       >
         {statsLoading ? (

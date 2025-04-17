@@ -14,8 +14,8 @@ const NavItem: React.FC<NavItemProps> = ({ to, icon, label }) => {
       to={to}
       className={({ isActive }) =>
         `flex items-center py-3 px-4 rounded-lg transition-all ${isActive
-          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
-          : 'text-gray-700 hover:bg-indigo-50 hover:text-indigo-700'
+          ? 'bg-[#3F90C2] text-white shadow-lg shadow-[#3F90C2]/20'
+          : 'text-gray-700 hover:bg-[#3F90C2]/10 hover:text-[#3F90C2]'
         }`
       }
     >
@@ -44,6 +44,17 @@ const Sidebar: React.FC = () => {
             label="Dashboard"
           />
 
+
+          <NavItem
+            to="/authors"
+            icon={
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+              </svg>
+            }
+            label="Organizadores"
+          />
+
           <NavItem
             to="/books"
             icon={
@@ -54,15 +65,6 @@ const Sidebar: React.FC = () => {
             label="Livros"
           />
 
-          <NavItem
-            to="/authors"
-            icon={
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-              </svg>
-            }
-            label="Autores"
-          />
 
           <NavItem
             to="/sales"
@@ -84,11 +86,21 @@ const Sidebar: React.FC = () => {
             }
             label="Comissões"
           />
+          <NavItem
+            to="/clients"
+            icon={
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+              </svg>
+            }
+            label="Clientes"
+          />
         </nav>
+
 
         <div className="mt-8 pt-4 border-t">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-semibold">
+            <div className="w-9 h-9 rounded-full bg-[#3F90C2]/20 flex items-center justify-center text-[#3F90C2] font-semibold">
               AP
             </div>
             <div>

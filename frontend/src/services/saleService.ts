@@ -32,6 +32,7 @@ export const getSalesStats = async (): Promise<ISaleStats> => {
 };
 
 export const importSales = async (file: File, source: 'parceira' | 'editora' = 'editora'): Promise<{
+  canceledSales: never[];
   message: string;
   salesCreated: ISale[];
   notFoundBooks?: string[];

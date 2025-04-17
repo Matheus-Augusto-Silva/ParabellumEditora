@@ -11,6 +11,17 @@ interface BookListProps {
 }
 
 const BookList: React.FC<BookListProps> = ({ books, onEdit, onDelete }) => {
+  const getAuthorNames = (book: IBook) => {
+    if (Array.isArray(book.author)) {
+      return book.author
+        .map(author => typeof author === 'object' ? author.name : 'Organizador não disponível')
+        .join(', ');
+    } else if (typeof book.author === 'object') {
+      return book.author.name;
+    }
+    return 'Organizador não disponível';
+  };
+
   const columns = [
     {
       header: 'Título',
@@ -33,16 +44,18 @@ const BookList: React.FC<BookListProps> = ({ books, onEdit, onDelete }) => {
       )
     },
     {
-      header: 'Autor',
+      header: 'Organizador(es)',
       accessor: 'author',
       render: (book: IBook) => (
         <div>
           <div className="text-sm text-gray-900">
-            {typeof book.author === 'object' ? book.author.name : 'Autor não disponível'}
+            {getAuthorNames(book)}
           </div>
-          <div className="text-xs text-gray-500">
-            Taxa: {typeof book.author === 'object' ? `${book.author.commissionRate}%` : 'N/A'}
-          </div>
+          {Array.isArray(book.author) && book.author.length > 0 && typeof book.author[0] === 'object' && (
+            <div className="text-xs text-gray-500">
+              Taxa: {book.author[0].commissionRate}%
+            </div>
+          )}
         </div>
       )
     },
@@ -66,7 +79,7 @@ const BookList: React.FC<BookListProps> = ({ books, onEdit, onDelete }) => {
       header: 'Preço',
       accessor: 'price',
       render: (book: IBook) => (
-        <span className="text-gray-900 font-medium">{formatCurrency(book.price)}</span>
+        <span className="text-gray-900 font-medium">{formatCurrency(book.price || 0)}</span>
       )
     },
     {

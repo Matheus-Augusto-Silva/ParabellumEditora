@@ -14,10 +14,19 @@ export interface IAuthor {
   updatedAt?: string;
 }
 
+export interface IClient {
+  _id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface IBook {
   _id: string;
   title: string;
-  author: IAuthor | string;
+  author: IAuthor[] | string[];
   isbn?: string;
   publishDate?: string;
   price?: number;
@@ -36,9 +45,10 @@ export interface ISale {
   salePrice: number;
   source?: string;
   commission?: string;
+  status?: 'completed' | 'canceled';
+  client?: IClient | string;
   createdAt?: string;
   updatedAt?: string;
-
 }
 
 export interface ICommission {

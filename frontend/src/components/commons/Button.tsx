@@ -15,7 +15,7 @@ const Button: React.FC<ButtonProps> = ({
   const baseClasses = 'font-medium rounded focus:outline-none focus:ring-2 focus:ring-opacity-50';
 
   const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500',
+    primary: 'bg-[#3F90C2] hover:bg-[#2D7CAE] text-white focus:ring-[#3F90C2]',
     secondary: 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500',
     success: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500',
     danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',

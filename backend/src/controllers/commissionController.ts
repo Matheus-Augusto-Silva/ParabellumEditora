@@ -17,9 +17,16 @@ export const getCommissions = asyncHandler(async (req: Request, res: Response): 
 export const getPendingCommissions = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const pendingCommissions = await Commission.find({ isPaid: false })
     .populate('author', 'name email commissionRate')
+    .populate({
+      path: 'sales',
+      select: 'book platform saleDate quantity salePrice isProcessed'
+    })
     .sort({ createdAt: -1 });
 
-  const totalPending = pendingCommissions.reduce((sum: number, comm: any) => sum + comm.commissionAmount, 0);
+  const totalPending = pendingCommissions.reduce((sum: number, comm: any) => {
+    const amount = comm.commissionAmount || 0;
+    return sum + amount;
+  }, 0);
 
   res.json({
     pendingCommissions,
@@ -31,9 +38,16 @@ export const getPendingCommissions = asyncHandler(async (req: Request, res: Resp
 export const getPaidCommissions = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const paidCommissions = await Commission.find({ isPaid: true })
     .populate('author', 'name email commissionRate')
+    .populate({
+      path: 'sales',
+      select: 'book platform saleDate quantity salePrice isProcessed'
+    })
     .sort({ paymentDate: -1 });
 
-  const totalPaid = paidCommissions.reduce((sum: number, comm: any) => sum + comm.commissionAmount, 0);
+  const totalPaid = paidCommissions.reduce((sum: number, comm: any) => {
+    const amount = comm.commissionAmount || 0;
+    return sum + amount;
+  }, 0);
 
   res.json({
     paidCommissions,
@@ -77,17 +91,8 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
     throw new Error('Autor não encontrado');
   }
 
-  const books = await Book.find({ author: authorId });
-
-  if (books.length === 0) {
-    res.status(404);
-    throw new Error('Autor não possui livros cadastrados');
-  }
-
-  const bookIds = books.map(book => book._id);
-
   const sales = await Sale.find({
-    book: { $in: bookIds },
+    author: authorId,
     saleDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
     isProcessed: false
   }).populate({
@@ -107,16 +112,18 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
   let totalSalesAmount = 0;
   let authorCommissionAmount = 0;
 
+  const authorRate = author.commissionRate / 100;
+
   for (const sale of sales) {
     const saleTotal = sale.salePrice * sale.quantity;
     totalSalesAmount += saleTotal;
 
-    if (sale.source === 'parceira') {
-      authorCommissionAmount += saleTotal * 0.3 * 0.1;
-    } else {
-      authorCommissionAmount += saleTotal * 0.9 * 0.1;
-    }
+    authorCommissionAmount += saleTotal * authorRate;
+
   }
+
+  authorCommissionAmount = Number(authorCommissionAmount.toFixed(2));
+  totalSalesAmount = Number(totalSalesAmount.toFixed(2));
 
   const commission = await Commission.create({
     author: authorId,

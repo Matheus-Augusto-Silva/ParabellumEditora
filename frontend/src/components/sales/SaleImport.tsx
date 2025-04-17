@@ -18,6 +18,7 @@ const SaleImport: React.FC<{
     message: string;
     notFoundBooks?: string[];
     duplicateSales?: string[];
+    canceledSales?: string[];
     errors?: string[];
   } | null>(null);
   const [showBookForm, setShowBookForm] = useState(false);
@@ -50,10 +51,11 @@ const SaleImport: React.FC<{
         message: result.message,
         notFoundBooks: result.notFoundBooks,
         duplicateSales: result.duplicateSales,
+        canceledSales: result.canceledSales || [],
         errors: result.errors
       });
 
-      if (!result.notFoundBooks && !result.duplicateSales && !result.errors) {
+      if (!result.notFoundBooks && !result.duplicateSales && !result.errors && !result.canceledSales) {
         toast.success(result.message);
         onSuccess();
       }
@@ -72,6 +74,7 @@ const SaleImport: React.FC<{
     if (importResult?.success &&
       (!importResult.notFoundBooks || importResult.notFoundBooks.length === 0) &&
       (!importResult.duplicateSales || importResult.duplicateSales.length === 0) &&
+      (!importResult.canceledSales || importResult.canceledSales.length === 0) &&
       (!importResult.errors || importResult.errors.length === 0)) {
       onSuccess();
     } else {
@@ -169,6 +172,24 @@ const SaleImport: React.FC<{
             </div>
           )}
 
+          {importResult.canceledSales && importResult.canceledSales.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Vendas canceladas importadas ({importResult.canceledSales.length}):
+              </h3>
+              <div className="bg-orange-50 p-3 rounded border border-orange-200 max-h-40 overflow-y-auto">
+                <ul className="list-disc pl-5 text-xs text-gray-600">
+                  {importResult.canceledSales.map((sale, index) => (
+                    <li key={index}>{sale}</li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Estas vendas foram importadas, mas marcadas como canceladas e não serão contabilizadas nos cálculos de comissão.
+              </p>
+            </div>
+          )}
+
           {importResult.errors && importResult.errors.length > 0 && (
             <div className="mb-4">
               <h3 className="text-sm font-medium text-gray-700 mb-2">
@@ -249,6 +270,9 @@ const SaleImport: React.FC<{
             />
             <p className="mt-2 text-xs text-gray-500">
               Formatos suportados: CSV, Excel (XLSX, XLS)
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              Nota: Vendas canceladas no relatório serão importadas, mas não contabilizadas nas comissões.
             </p>
           </div>
 

@@ -344,14 +344,43 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
             normalizedData[key.toLowerCase().trim()] = (row as Record<string, any>)[key];
           });
 
-          const bookTitle = normalizedData['título'] || '';
-          let platform = normalizedData['canal'] || '';
-          const quantity = parseInt(normalizedData['quantidade'] || '0', 10);
-          const salePrice = parseFloat(normalizedData['valor unitário cliente'] ||
-            (normalizedData['valor total capa'] / quantity) || '0');
-          let saleDateStr = normalizedData['data venda'] || '';
-          const orderNumber = normalizedData['pedido'] || '';
-          const isbn = normalizedData['sku'] || '';
+          let bookTitle = '';
+          let quantity = 0;
+          let salePrice = 0;
+          let orderNumber = '';
+          let saleDateStr = '';
+
+          // Extração para modelo WooCommerce (planilha do site)
+          if ('order_number' in normalizedData) {
+            orderNumber = normalizedData['order_number'] || '';
+            saleDateStr = normalizedData['order_date'] || '';
+
+            for (const key in normalizedData) {
+              if (key.startsWith('line_item_')) {
+                const lineItem = normalizedData[key];
+                if (lineItem && typeof lineItem === 'string') {
+                  const match = lineItem.match(/(.*) × (\d+) \((R\$[\d,]+)\)/);
+                  if (match) {
+                    bookTitle = match[1].trim();
+                    quantity = parseInt(match[2], 10);
+                    salePrice = parseFloat(match[3].replace('R$', '').replace(',', '.'));
+                    break;
+                  }
+                }
+              }
+            }
+          } else {
+            // Extração para modelo de planilha de parceiros
+            bookTitle = normalizedData['título'] || normalizedData['nome do produto'] || '';
+            quantity = parseInt(normalizedData['quantidade'] || '0', 10);
+            salePrice = parseFloat(normalizedData['valor unitário cliente'] ||
+              normalizedData['valor unitário'] ||
+              (normalizedData['valor total capa'] / quantity) || '0');
+            saleDateStr = normalizedData['data venda'] || '';
+            orderNumber = normalizedData['pedido'] || '';
+          }
+
+          let platform = normalizedData['canal'] || 'Site da Editora';
 
           if (!bookTitle || !platform || isNaN(quantity) || isNaN(salePrice)) {
             errors.push(`Dados inválidos: ${JSON.stringify(normalizedData)}`);
@@ -370,6 +399,8 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
             }
           }
 
+          const isbn = normalizedData['sku'] || '';
+
           let book;
           if (isbn) {
             book = await Book.findOne({ isbn });
@@ -387,8 +418,12 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
             continue;
           }
 
+          await book.populate('author');
+          const authorId = book.author._id;
+
           const sale = new Sale({
             book: book._id,
+            author: authorId,
             platform,
             saleDate,
             quantity,
@@ -429,12 +464,43 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
                 normalizedData[normalizedKey] = data[key];
               });
 
-              const bookTitle = normalizedData.booktitle || normalizedData.title;
-              let platform = normalizedData.platform;
-              let saleDateStr = normalizedData.saledate || normalizedData.date;
-              const quantity = parseInt(normalizedData.quantity, 10);
-              const salePrice = parseFloat(normalizedData.saleprice || normalizedData.price);
-              const orderNumber = normalizedData.ordernumber || normalizedData.order;
+              let bookTitle = '';
+              let quantity = 0;
+              let salePrice = 0;
+              let orderNumber = '';
+              let saleDateStr = '';
+              let platform = '';
+
+              // Planilha do site
+              if ('order_number' in normalizedData) {
+                orderNumber = normalizedData['order_number'] || '';
+                saleDateStr = normalizedData['order_date'] || '';
+
+                for (const key in normalizedData) {
+                  if (key.startsWith('line_item_')) {
+                    const lineItem = normalizedData[key];
+                    if (lineItem && typeof lineItem === 'string') {
+                      const match = lineItem.match(/(.*) × (\d+) \((R\$[\d,]+)\)/);
+                      if (match) {
+                        bookTitle = match[1].trim();
+                        quantity = parseInt(match[2], 10);
+                        salePrice = parseFloat(match[3].replace('R$', '').replace(',', '.'));
+                        break;
+                      }
+                    }
+                  }
+                }
+                platform = 'Site da Editora';
+              } else {
+                // Planilha dos parceirops
+                bookTitle = normalizedData.booktitle || normalizedData.title;
+                platform = normalizedData.platform;
+                saleDateStr = normalizedData.saledate || normalizedData.date;
+                quantity = parseInt(normalizedData.quantity, 10);
+                salePrice = parseFloat(normalizedData.saleprice || normalizedData.price);
+                orderNumber = normalizedData.ordernumber || normalizedData.order;
+              }
+
               const isbn = normalizedData.isbn || '';
 
               if (!bookTitle || !platform || !saleDateStr || isNaN(quantity) || isNaN(salePrice)) {
@@ -471,8 +537,12 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
                 return;
               }
 
+              await book.populate('author');
+              const authorId = book.author._id;
+
               const sale = new Sale({
                 book: book._id,
+                author: authorId,
                 platform,
                 saleDate,
                 quantity,
@@ -518,7 +588,8 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
           path: 'author',
           select: 'name commissionRate'
         }
-      });
+      })
+      .populate('author', 'name commissionRate');
     populatedSales.push(populatedSale);
   }
 
@@ -563,7 +634,7 @@ export const getFilteredSales = async (req: Request, res: Response): Promise<voi
     const filter: any = {};
 
     if (author) {
-      filter['book.author._id'] = new mongoose.Types.ObjectId(author as string);
+      filter.author = new mongoose.Types.ObjectId(author as string);
     }
 
     if (startDate && endDate) {
@@ -581,7 +652,16 @@ export const getFilteredSales = async (req: Request, res: Response): Promise<voi
       filter.source = source;
     }
 
-    const sales = await Sale.find(filter);
+    const sales = await Sale.find(filter)
+      .populate({
+        path: 'book',
+        populate: {
+          path: 'author',
+          select: 'name commissionRate'
+        }
+      })
+      .populate('author', 'name commissionRate')
+      .sort({ saleDate: -1 });
 
     res.status(200).json(sales);
   } catch (error: any) {

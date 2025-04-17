@@ -21,8 +21,10 @@ const SalesPage: React.FC = () => {
   const [selectedSale, setSelectedSale] = useState<ISale | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
   const [platformFilter, setPlatformFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const fetchSales = async () => {
     try {
@@ -45,7 +47,7 @@ const SalesPage: React.FC = () => {
 
   useEffect(() => {
     filterSales();
-  }, [searchTerm, dateFilter, platformFilter, allSales]);
+  }, [searchTerm, dateFilter, platformFilter, sourceFilter, statusFilter, allSales]);
 
   const handleDeleteSale = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta venda? Esta ação não pode ser desfeita.')) {
@@ -82,29 +84,39 @@ const SalesPage: React.FC = () => {
       const term = searchTerm.toLowerCase().trim();
       filtered = filtered.filter(sale =>
         (typeof sale.book === 'object' && sale.book.title.toLowerCase().includes(term)) ||
-        (typeof sale.book === 'object' && typeof sale.book.author === 'object' && sale.book.author.name.toLowerCase().includes(term)) ||
+        (typeof sale.book === 'object' && typeof sale.book.author === 'object' && sale.book.author.name?.toLowerCase().includes(term)) ||
         sale.platform.toLowerCase().includes(term)
       );
     }
 
-    const now = new Date();
-    if (dateFilter !== 'all') {
-      if (dateFilter === 'today') {
-        const today = new Date(now.setHours(0, 0, 0, 0));
-        filtered = filtered.filter(sale => new Date(sale.saleDate) >= today);
-      } else if (dateFilter === 'week') {
-        const weekAgo = new Date(now);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        filtered = filtered.filter(sale => new Date(sale.saleDate) >= weekAgo);
-      } else if (dateFilter === 'month') {
-        const monthAgo = new Date(now);
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        filtered = filtered.filter(sale => new Date(sale.saleDate) >= monthAgo);
-      }
+    if (dateFilter.startDate && dateFilter.endDate) {
+      const startDate = new Date(dateFilter.startDate).setHours(0, 0, 0, 0);
+      const endDate = new Date(dateFilter.endDate).setHours(23, 59, 59, 999);
+
+      filtered = filtered.filter(sale => {
+        const saleDate = new Date(sale.saleDate).getTime();
+        return saleDate >= startDate && saleDate <= endDate;
+      });
     }
 
     if (platformFilter !== 'all') {
       filtered = filtered.filter(sale => sale.platform === platformFilter);
+    }
+
+    if (sourceFilter !== 'all') {
+      filtered = filtered.filter(sale => sale.source === sourceFilter);
+    }
+
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'processed') {
+        filtered = filtered.filter(sale => sale.commission);
+      } else if (statusFilter === 'pending') {
+        filtered = filtered.filter(sale => !sale.commission);
+      } else if (statusFilter === 'canceled') {
+        filtered = filtered.filter(sale => sale.status === 'canceled');
+      } else if (statusFilter === 'completed') {
+        filtered = filtered.filter(sale => sale.status === 'completed');
+      }
     }
 
     setFilteredSales(filtered);
@@ -153,8 +165,19 @@ const SalesPage: React.FC = () => {
 
   const platforms = Array.from(new Set(allSales.map(sale => sale.platform)));
 
-  const totalAmount = filteredSales.reduce((sum, sale) => sum + (sale.salePrice * sale.quantity), 0);
-  const totalQuantity = filteredSales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const totalAmount = filteredSales.reduce((sum, sale) => {
+    if (sale.status !== 'canceled') {
+      return sum + (sale.salePrice * sale.quantity);
+    }
+    return sum;
+  }, 0);
+
+  const totalQuantity = filteredSales.reduce((sum, sale) => {
+    if (sale.status !== 'canceled') {
+      return sum + sale.quantity;
+    }
+    return sum;
+  }, 0);
 
   const columns = [
     {
@@ -170,7 +193,7 @@ const SalesPage: React.FC = () => {
           <div>
             <div className="font-medium text-gray-900">{typeof sale.book === 'object' ? sale.book.title : 'Livro não disponível'}</div>
             <div className="text-xs text-gray-500">
-              {typeof sale.book === 'object' && typeof sale.book.author === 'object' ? `Autor: ${sale.book.author.name}` : ''}
+              {typeof sale.book === 'object' && typeof sale.book.author === 'object' ? `Organizador: ${sale.book.author.name}` : ''}
             </div>
           </div>
         </div>
@@ -182,6 +205,18 @@ const SalesPage: React.FC = () => {
       render: (sale: ISale) => (
         <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
           {sale.platform}
+        </span>
+      )
+    },
+    {
+      header: 'Origem',
+      accessor: 'source',
+      render: (sale: ISale) => (
+        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.source === 'editora'
+          ? 'bg-green-100 text-green-800'
+          : 'bg-gray-100 text-gray-800'
+          }`}>
+          {sale.source === 'editora' ? 'Editora' : 'Parceira'}
         </span>
       )
     },
@@ -216,26 +251,44 @@ const SalesPage: React.FC = () => {
       header: 'Total',
       accessor: 'total',
       render: (sale: ISale) => (
-        <div className="text-sm font-medium text-gray-900">
+        <div className={`text-sm font-medium ${sale.status === 'canceled'
+          ? 'text-gray-400 line-through'
+          : 'text-gray-900'
+          }`}>
           {formatCurrency(sale.salePrice * sale.quantity)}
         </div>
       )
     },
     {
-      header: 'Status',
-      accessor: 'commission',
-      render: (sale: ISale) => (
-        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.commission ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-          {sale.commission ? 'Processada' : 'Pendente'}
-        </span>
-      )
+      header: 'Comissão',
+      accessor: 'status',
+      render: (sale: ISale) => {
+        let statusClass = 'bg-yellow-100 text-yellow-800';
+        let statusText = 'Pendente';
+
+        if (sale.commission) {
+          statusClass = 'bg-green-100 text-green-800';
+          statusText = 'Processada';
+        }
+
+        if (sale.status === 'canceled') {
+          statusClass = 'bg-red-100 text-red-800';
+          statusText = 'Cancelada';
+        }
+
+        return (
+          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}`}>
+            {statusText}
+          </span>
+        );
+      }
     },
     {
       header: 'Ações',
       accessor: '_id',
       render: (sale: ISale) => (
         <div className="flex space-x-2">
-          {!sale.commission && (
+          {!sale.commission && sale.status !== 'canceled' && (
             <>
               <Button
                 variant="primary"
@@ -269,15 +322,25 @@ const SalesPage: React.FC = () => {
             </>
           )}
 
-          {sale.commission && (
+          {(sale.commission || sale.status === 'canceled') && (
             <span className="text-xs text-gray-500">
-              Processada em comissão
+              {sale.status === 'canceled' ? 'Venda cancelada' : 'Processada em comissão'}
             </span>
           )}
         </div>
       ),
     },
   ];
+
+  const getRowClass = (sale: ISale) => {
+    if (sale.source === 'editora') {
+      return 'bg-green-50 hover:bg-green-100';
+    }
+    if (sale.status === 'canceled') {
+      return 'bg-red-50 hover:bg-red-100';
+    }
+    return '';
+  };
 
   return (
     <div>
@@ -364,8 +427,8 @@ const SalesPage: React.FC = () => {
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="md:col-span-2">
             <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
             <div className="relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -377,7 +440,7 @@ const SalesPage: React.FC = () => {
                 type="text"
                 id="search"
                 className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
-                placeholder="Buscar por livro, autor..."
+                placeholder="Buscar por livro, organizador..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -385,32 +448,54 @@ const SalesPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="date-filter" className="block text-sm font-medium text-gray-700 mb-1">Período</label>
+            <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 mb-1">Data Inicial</label>
+            <input
+              id="start-date"
+              type="date"
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              value={dateFilter.startDate}
+              onChange={(e) => setDateFilter({ ...dateFilter, startDate: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 mb-1">Data Final</label>
+            <input
+              id="end-date"
+              type="date"
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              value={dateFilter.endDate}
+              onChange={(e) => setDateFilter({ ...dateFilter, endDate: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="source-filter" className="block text-sm font-medium text-gray-700 mb-1">Origem</label>
             <select
-              id="date-filter"
+              id="source-filter"
               className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
             >
-              <option value="all">Todos os períodos</option>
-              <option value="today">Hoje</option>
-              <option value="week">Últimos 7 dias</option>
-              <option value="month">Últimos 30 dias</option>
+              <option value="all">Todas</option>
+              <option value="editora">Editora</option>
+              <option value="parceira">Parceira</option>
             </select>
           </div>
 
           <div>
-            <label htmlFor="platform-filter" className="block text-sm font-medium text-gray-700 mb-1">Plataforma</label>
+            <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
-              id="platform-filter"
+              id="status-filter"
               className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-              value={platformFilter}
-              onChange={(e) => setPlatformFilter(e.target.value)}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="all">Todas as plataformas</option>
-              {platforms.map(platform => (
-                <option key={platform} value={platform}>{platform}</option>
-              ))}
+              <option value="all">Todos</option>
+              <option value="pending">Pendentes</option>
+              <option value="processed">Processados</option>
+              <option value="canceled">Cancelados</option>
+              <option value="completed">Completos</option>
             </select>
           </div>
         </div>
@@ -434,8 +519,23 @@ const SalesPage: React.FC = () => {
               data={filteredSales}
               keyExtractor={(sale) => sale._id}
               onRowClick={(sale) => !sale.commission && handleOpenFormModal(sale)}
+              rowClassName={getRowClass}
             />
           )}
+
+          <div className="bg-gray-50 px-4 py-3 text-right sm:px-6 border-t border-gray-200">
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">Legenda:</span>
+              <span className="inline-flex items-center ml-4">
+                <span className="w-3 h-3 bg-green-50 border border-green-200 rounded-full mr-1"></span>
+                Vendas da Editora
+              </span>
+              <span className="inline-flex items-center ml-4">
+                <span className="w-3 h-3 bg-red-50 border border-red-200 rounded-full mr-1"></span>
+                Vendas Canceladas
+              </span>
+            </div>
+          </div>
         </div>
       </DataFetchWrapper>
 
@@ -457,6 +557,7 @@ const SalesPage: React.FC = () => {
         isOpen={isImportModalOpen}
         onClose={handleCloseImportModal}
         title="Importar Vendas"
+        size="lg"
       >
         {isImportModalOpen && (
           <SaleImport

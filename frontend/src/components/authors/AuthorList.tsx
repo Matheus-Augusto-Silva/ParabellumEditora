@@ -72,7 +72,7 @@ const AuthorList: React.FC<AuthorListProps> = ({ authors, onEdit, onDelete, onVi
       data={authors}
       keyExtractor={(author) => author._id}
       onRowClick={onEdit}
-      emptyMessage="Nenhum autor encontrado"
+      emptyMessage="Nenhum organizador encontrado"
     />
   );
 };

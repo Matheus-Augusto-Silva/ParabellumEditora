@@ -3,6 +3,7 @@ import Button from '@/components/commons/Button';
 import { getBooks } from '@/services/bookService';
 import { createSale, updateSale } from '@/services/saleService';
 import { IBook, ISale } from '@/types';
+import InputMask from 'react-input-mask';
 
 interface SaleFormProps {
   sale?: ISale | null;
@@ -15,9 +16,10 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
   const [selectedBook, setSelectedBook] = useState<string>('');
   const [platform, setPlatform] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [salePrice, setSalePrice] = useState<number>(0);
+  const [salePrice, setSalePrice] = useState<string>('');
   const [saleDate, setSaleDate] = useState<string>('');
   const [source, setSource] = useState<'parceira' | 'editora'>('editora');
+  const [status, setStatus] = useState<'completed' | 'canceled'>('completed');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,13 +40,23 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
       setSelectedBook(typeof sale.book === 'object' ? sale.book._id : sale.book);
       setPlatform(sale.platform);
       setQuantity(sale.quantity);
-      setSalePrice(sale.salePrice);
+      setSalePrice(sale.salePrice.toString());
       setSaleDate(new Date(sale.saleDate).toISOString().split('T')[0]);
       setSource(sale.source === 'parceira' || sale.source === 'editora' ? sale.source : 'editora');
+      setStatus(sale.status === 'canceled' ? 'canceled' : 'completed');
     } else {
       setSaleDate(new Date().toISOString().split('T')[0]);
     }
   }, [sale]);
+
+  const formatPrice = (value: string): string => {
+    const numericValue = value.replace(/\D/g, '');
+
+    if (numericValue === '') return '';
+
+    const floatValue = parseFloat(numericValue) / 100;
+    return floatValue.toFixed(2);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,9 +74,10 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
         book: selectedBook,
         platform,
         quantity,
-        salePrice,
+        salePrice: parseFloat(salePrice),
         saleDate,
-        source
+        source,
+        status
       };
 
       if (sale && sale._id) {
@@ -162,13 +175,35 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
             onChange={(e) => setSource(e.target.value as 'parceira' | 'editora')}
             required
           >
-            <option value="editora">Site/Editora (90% editora, 10% autor)</option>
+            <option value="editora">Site/Editora (90% editora, 10% organizador)</option>
             <option value="parceira">Parceira (30% editora, 70% parceira)</option>
           </select>
           <p className="mt-1 text-xs text-gray-500">
             {source === 'editora' ?
-              'Das vendas do site/editora, 90% fica com a editora (dos quais 10% vai para o autor)' :
-              'Das vendas via parceira, 30% fica com a editora (dos quais 10% vai para o autor) e 70% vai para a parceira'}
+              'Das vendas do site/editora, 90% fica com a editora (dos quais 10% vai para o organizador)' :
+              'Das vendas via parceira, 30% fica com a editora (dos quais 10% vai para o organizador) e 70% vai para a parceira'}
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+            Status da Venda <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="status"
+            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as 'completed' | 'canceled')}
+            required
+          >
+            <option value="completed">Completada</option>
+            <option value="canceled">Cancelada</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            {status === 'canceled'
+              ? 'Vendas canceladas são importadas, mas não contabilizadas no total de vendas para comissões.'
+              : 'Vendas completadas são contabilizadas para cálculo de comissões.'
+            }
           </p>
         </div>
 
@@ -184,7 +219,7 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
               step="1"
               className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
               value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
+              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
               required
             />
           </div>
@@ -197,15 +232,13 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <span className="text-gray-500 sm:text-sm">R$</span>
               </div>
-              <input
-                type="number"
+              <InputMask
+                mask="999.999,99"
                 id="salePrice"
-                min="0"
-                step="0.01"
+                value={salePrice}
+                onChange={(e) => setSalePrice(formatPrice(e.target.value))}
                 className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 pr-12 sm:text-sm border-gray-300 rounded-md"
                 placeholder="0,00"
-                value={salePrice}
-                onChange={(e) => setSalePrice(parseFloat(e.target.value) || 0)}
                 required
               />
             </div>

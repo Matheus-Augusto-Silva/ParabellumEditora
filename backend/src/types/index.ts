@@ -23,6 +23,7 @@ export interface IBook extends Document {
 export type PlatformType = 'Amazon' | 'Mercado Livre' | 'Estante Virtual' | 'umLivro' | 'Carrefour' | 'Americanas' | 'Site da Editora' | 'Outra plataforma';
 export interface ISale extends Document {
   book: Types.ObjectId | IBook;
+  author?: Types.ObjectId | IAuthor;
   platform: PlatformType;
   saleDate: Date;
   quantity: number;
@@ -32,6 +33,27 @@ export interface ISale extends Document {
   createdAt: Date;
   updatedAt: Date;
   source?: string;
+  client?: Types.ObjectId | IClient;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  customerCity?: string;
+  customerState?: string;
+  customerPostalCode?: string;
+}
+
+export interface IClient extends Document {
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface ICommission extends Document {

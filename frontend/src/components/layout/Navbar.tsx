@@ -32,7 +32,7 @@ const Navbar: React.FC = () => {
           <nav className="container mx-auto px-4">
             <Link to="/dashboard" className="block py-2 text-gray-300 hover:text-white">Dashboard</Link>
             <Link to="/books" className="block py-2 text-gray-300 hover:text-white">Livros</Link>
-            <Link to="/authors" className="block py-2 text-gray-300 hover:text-white">Autores</Link>
+            <Link to="/authors" className="block py-2 text-gray-300 hover:text-white">Organizadores</Link>
             <Link to="/sales" className="block py-2 text-gray-300 hover:text-white">Vendas</Link>
             <Link to="/commissions" className="block py-2 text-gray-300 hover:text-white">Comissões</Link>
           </nav>

@@ -8,6 +8,10 @@ const saleSchema: Schema = new mongoose.Schema(
       ref: 'Book',
       required: [true, 'O livro é obrigatório']
     },
+    author: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Author'
+    },
     platform: {
       type: String,
       required: [true, 'A plataforma é obrigatória'],
@@ -60,6 +64,25 @@ const saleSchema: Schema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+saleSchema.pre('save', async function (next) {
+  if (this.author) {
+    return next();
+  }
+
+  if (this.book) {
+    try {
+      const book = await mongoose.model('Book').findById(this.book).populate('author');
+      if (book && book.author) {
+        this.author = book.author._id;
+      }
+    } catch (error) {
+      console.error('Erro ao buscar autor do livro:', error);
+    }
+  }
+
+  next();
+});
 
 saleSchema.set('toJSON', {
   virtuals: true,
