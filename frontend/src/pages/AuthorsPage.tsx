@@ -197,11 +197,7 @@ const AuthorsPage: React.FC = () => {
           onViewStats={handleViewStats}
         />
 
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-        />
+
       </DataFetchWrapper>
 
       <Modal

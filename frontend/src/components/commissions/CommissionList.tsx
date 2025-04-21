@@ -12,8 +12,8 @@ interface CommissionItem {
   author: {
     _id: string;
     name: string;
-  } | string;  // Permitir que o autor seja uma string (ID) ou um objeto
-  authorName?: string; // Campo alternativo para o nome do autor
+  } | string;
+  authorName?: string;
   startDate: string;
   endDate: string;
   commissionAmount: number;

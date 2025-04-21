@@ -359,18 +359,7 @@ const SaleImport: React.FC<{
                 Ao habilitar esta opção, o sistema criará ou atualizará registros de clientes com base nos dados dos compradores.
               </p>
 
-              <div className="flex items-center pt-2">
-                <input
-                  type="checkbox"
-                  id="allowZeroPrices"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  checked={allowZeroPrices}
-                  onChange={(e) => setAllowZeroPrices(e.target.checked)}
-                />
-                <label htmlFor="allowZeroPrices" className="ml-2 block text-sm text-gray-700">
-                  Permitir preços zero/ausentes (usando o preço do livro no banco de dados)
-                </label>
-              </div>
+
               <p className="ml-6 text-xs text-gray-500">
                 Quando o preço não está presente na planilha, o sistema usará o preço cadastrado no banco de dados.
               </p>
