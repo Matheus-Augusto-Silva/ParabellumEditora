@@ -13,7 +13,7 @@ const MainLayout: React.FC = () => {
         <Sidebar />
 
         <main className="flex-1 md:ml-64 pt-16 pb-10 px-4 md:px-8 bg-gray-50">
-          <div className="max-w-7xl mx-auto">
+          <div style={{ maxWidth: '1600px', padding: '1rem' }}>
             <Outlet />
           </div>
         </main>

@@ -13,6 +13,8 @@ const SaleImport: React.FC<{
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState<'parceira' | 'editora'>('editora');
+  const [allowZeroPrices, setAllowZeroPrices] = useState<boolean>(false);
+  const [importCustomers, setImportCustomers] = useState<boolean>(true);
   const [importResult, setImportResult] = useState<{
     success: boolean;
     message: string;
@@ -20,12 +22,22 @@ const SaleImport: React.FC<{
     duplicateSales?: string[];
     canceledSales?: string[];
     errors?: string[];
+    customersCreated?: number;
   } | null>(null);
   const [showBookForm, setShowBookForm] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+
+      // Determinar automaticamente a origem das vendas baseado no nome do arquivo
+      if (selectedFile.name.toLowerCase().includes('pedidosexport') ||
+        selectedFile.name.toLowerCase().includes('woocommerce')) {
+        setSource('editora');
+      } else if (selectedFile.name.toLowerCase().includes('vendas')) {
+        setSource('parceira');
+      }
     }
   };
 
@@ -45,14 +57,21 @@ const SaleImport: React.FC<{
     setImportResult(null);
 
     try {
-      const result = await importSales(file, source);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('source', source);
+      formData.append('allowZeroPrices', allowZeroPrices ? 'true' : 'false');
+      formData.append('importCustomers', importCustomers ? 'true' : 'false');
+
+      const result = await importSales(file, source, allowZeroPrices, importCustomers);
       setImportResult({
         success: true,
         message: result.message,
         notFoundBooks: result.notFoundBooks,
         duplicateSales: result.duplicateSales,
         canceledSales: result.canceledSales || [],
-        errors: result.errors
+        errors: result.errors,
+        customersCreated: result.customersCreated
       });
 
       if (!result.notFoundBooks && !result.duplicateSales && !result.errors && !result.canceledSales) {
@@ -106,6 +125,16 @@ const SaleImport: React.FC<{
     })).size;
   };
 
+  const detectFileType = (fileName: string) => {
+    const name = fileName.toLowerCase();
+    if (name.includes('pedidosexport') || name.includes('woocommerce')) {
+      return 'WordPress (site da editora)';
+    } else if (name.includes('vendas') || name.includes('parceiros')) {
+      return 'Vendas de parceiros';
+    }
+    return 'Desconhecido';
+  };
+
   return (
     <div>
       {importResult ? (
@@ -115,6 +144,17 @@ const SaleImport: React.FC<{
             message={importResult.message}
             className="mb-4"
           />
+
+          {importResult.customersCreated && importResult.customersCreated > 0 && (
+            <div className="mb-4 bg-green-50 p-3 rounded border border-green-200">
+              <h3 className="text-sm font-medium text-green-700 mb-1">
+                Clientes importados com sucesso!
+              </h3>
+              <p className="text-xs text-green-600">
+                {importResult.customersCreated} novos clientes foram criados a partir dos dados das vendas.
+              </p>
+            </div>
+          )}
 
           {importResult.notFoundBooks && importResult.notFoundBooks.length > 0 && (
             <div className="mb-4">
@@ -215,41 +255,12 @@ const SaleImport: React.FC<{
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Origem das Vendas
-            </label>
-            <div className="flex space-x-4">
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  id="editora"
-                  name="source"
-                  value="editora"
-                  checked={source === 'editora'}
-                  onChange={() => setSource('editora')}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <label htmlFor="editora" className="ml-2 block text-sm text-gray-700">
-                  Vendas da Editora
-                </label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  id="parceira"
-                  name="source"
-                  value="parceira"
-                  checked={source === 'parceira'}
-                  onChange={() => setSource('parceira')}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <label htmlFor="parceira" className="ml-2 block text-sm text-gray-700">
-                  Parceiros (Amazon, Mercado Livre, etc.)
-                </label>
-              </div>
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Importar Planilha de Vendas</h3>
+            <p className="text-xs text-gray-500">
+              Selecione uma planilha para importar vendas. O sistema suporta arquivos CSV ou Excel (XLSX/XLS).
+            </p>
           </div>
 
           <div className="mb-4">
@@ -268,15 +279,105 @@ const SaleImport: React.FC<{
                 hover:file:bg-indigo-100"
               required
             />
+
+            {file && (
+              <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                <p>Arquivo detectado: <strong>{file.name}</strong></p>
+                <p>Tipo: <strong>{detectFileType(file.name)}</strong></p>
+              </div>
+            )}
+
             <p className="mt-2 text-xs text-gray-500">
               Formatos suportados: CSV, Excel (XLSX, XLS)
             </p>
-            <p className="mt-1 text-xs text-gray-500">
-              Nota: Vendas canceladas no relatório serão importadas, mas não contabilizadas nas comissões.
-            </p>
           </div>
 
-          <div className="flex justify-end space-x-3">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Origem das Vendas
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 cursor-pointer transition-colors">
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="editora"
+                    name="source"
+                    value="editora"
+                    checked={source === 'editora'}
+                    onChange={() => setSource('editora')}
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="editora" className="ml-2 block text-sm text-gray-700 font-medium">
+                    Vendas da Editora (WooCommerce/WordPress)
+                  </label>
+                </div>
+                <p className="mt-1 ml-6 text-xs text-gray-500">
+                  Planilhas exportadas do site da editora (WooCommerce)
+                </p>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 cursor-pointer transition-colors">
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="parceira"
+                    name="source"
+                    value="parceira"
+                    checked={source === 'parceira'}
+                    onChange={() => setSource('parceira')}
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="parceira" className="ml-2 block text-sm text-gray-700 font-medium">
+                    Parceiros (Amazon, Mercado Livre, etc.)
+                  </label>
+                </div>
+                <p className="mt-1 ml-6 text-xs text-gray-500">
+                  Planilhas de vendas via parceiros externos
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Opções Avançadas</h3>
+
+            <div className="space-y-3">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="importCustomers"
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  checked={importCustomers}
+                  onChange={(e) => setImportCustomers(e.target.checked)}
+                />
+                <label htmlFor="importCustomers" className="ml-2 block text-sm text-gray-700">
+                  Importar dados de clientes (apenas para vendas da editora)
+                </label>
+              </div>
+              <p className="ml-6 text-xs text-gray-500">
+                Ao habilitar esta opção, o sistema criará ou atualizará registros de clientes com base nos dados dos compradores.
+              </p>
+
+              <div className="flex items-center pt-2">
+                <input
+                  type="checkbox"
+                  id="allowZeroPrices"
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  checked={allowZeroPrices}
+                  onChange={(e) => setAllowZeroPrices(e.target.checked)}
+                />
+                <label htmlFor="allowZeroPrices" className="ml-2 block text-sm text-gray-700">
+                  Permitir preços zero/ausentes (usando o preço do livro no banco de dados)
+                </label>
+              </div>
+              <p className="ml-6 text-xs text-gray-500">
+                Quando o preço não está presente na planilha, o sistema usará o preço cadastrado no banco de dados.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
             <Button
               variant="secondary"
               onClick={onCancel}

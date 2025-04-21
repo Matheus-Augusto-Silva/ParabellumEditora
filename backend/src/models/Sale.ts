@@ -31,6 +31,11 @@ const saleSchema: Schema = new mongoose.Schema(
       required: [true, 'A data da venda é obrigatória'],
       default: Date.now
     },
+    status: {
+      type: String,
+      enum: ['completed', 'canceled'],
+      default: 'completed'
+    },
     quantity: {
       type: Number,
       required: [true, 'A quantidade vendida é obrigatória'],
@@ -53,6 +58,22 @@ const saleSchema: Schema = new mongoose.Schema(
       type: String,
       trim: true,
       index: true
+    },
+    customer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer'
+    },
+    customerName: {
+      type: String,
+      trim: true
+    },
+    customerEmail: {
+      type: String,
+      trim: true
+    },
+    customerPhone: {
+      type: String,
+      trim: true
     },
     source: {
       type: String,

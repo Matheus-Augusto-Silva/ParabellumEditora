@@ -112,7 +112,6 @@ const AuthorForm: React.FC<AuthorFormProps> = ({ author, onCancel, onSave }) => 
           Taxa de Comissão (%) <span className="text-red-500">*</span>
         </label>
         <InputMask
-          mask="999.99"
           value={commissionRate}
           onChange={(e) => setCommissionRate(e.target.value.replace(/[^\d.]/g, ''))}
         >

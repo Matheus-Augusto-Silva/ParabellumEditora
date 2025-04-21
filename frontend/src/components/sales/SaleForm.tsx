@@ -233,7 +233,6 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
                 <span className="text-gray-500 sm:text-sm">R$</span>
               </div>
               <InputMask
-                mask="999.999,99"
                 id="salePrice"
                 value={salePrice}
                 onChange={(e) => setSalePrice(formatPrice(e.target.value))}

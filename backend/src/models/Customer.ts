@@ -1,7 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
-import { IClient } from '../types';
+import { ICustomer } from '../types';
 
-const clientSchema: Schema = new mongoose.Schema(
+const customerSchema: Schema = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -19,26 +19,6 @@ const clientSchema: Schema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true
-    },
-    address: {
-      type: String,
-      trim: true
-    },
-    city: {
-      type: String,
-      trim: true
-    },
-    state: {
-      type: String,
-      trim: true
-    },
-    postalCode: {
-      type: String,
-      trim: true
-    },
-    notes: {
-      type: String,
-      trim: true
     }
   },
   {
@@ -46,7 +26,7 @@ const clientSchema: Schema = new mongoose.Schema(
   }
 );
 
-clientSchema.set('toJSON', {
+customerSchema.set('toJSON', {
   virtuals: true,
   versionKey: false,
   transform: function (doc, ret) {
@@ -55,6 +35,6 @@ clientSchema.set('toJSON', {
   }
 });
 
-const Client = mongoose.model<IClient>('Client', clientSchema);
+const Customer = mongoose.model<ICustomer>('Customer', customerSchema);
 
-export default Client;
+export default Customer;

@@ -183,15 +183,18 @@ const BookForm: React.FC<BookFormProps> = ({ book, onCancel, onSave }) => {
       />
 
       <div className="mb-4">
-        <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-          Preço <span className="text-red-500">*</span>
+        <label htmlFor="price" className="text-sm font-medium text-gray-700 mb-1"
+          style={{ marginTop: '0.5rem' }}
+        >
+          Preço de Referência  <span className="text-red-500">*</span>
         </label>
-        <div className="mt-1 relative rounded-md shadow-sm">
+        <div className="mt-1 relative rounded-md shadow-sm"
+          style={{ marginTop: '0.5rem' }}
+        >
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <span className="text-gray-500 sm:text-sm">R$</span>
           </div>
           <InputMask
-            mask="999.999,99"
             id="price"
             value={price}
             onChange={(e) => setPrice(formatPrice(e.target.value))}

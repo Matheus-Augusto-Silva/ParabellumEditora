@@ -6,6 +6,7 @@ import Modal from '@/components/commons/Modal';
 import Alert from '@/components/commons/Alert';
 import AuthorForm from '@/components/authors/AuthorForm';
 import AuthorList from '@/components/authors/AuthorList';
+import Pagination from '@/components/commons/Pagination';
 import { formatCurrency } from '@/utils/formatters';
 import { getAuthors, getAuthorStats, deleteAuthor } from '@/services/authorService';
 import { IAuthor, IAuthorStats } from '@/types';
@@ -25,13 +26,22 @@ const AuthorsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
 
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [limit] = useState<number>(10);
+
   const fetchAuthors = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getAuthors();
+
+      const data = await getAuthors(currentPage, limit);
+
+      const paginationData = await getAuthors(currentPage, limit);
+
       setAllAuthors(data);
       setFilteredAuthors(data);
+      setTotalPages(paginationData.totalPages);
       setLoading(false);
     } catch (error: any) {
       setError('Falha ao carregar os organizadores. Por favor, tente novamente.');
@@ -42,7 +52,7 @@ const AuthorsPage: React.FC = () => {
 
   useEffect(() => {
     fetchAuthors();
-  }, []);
+  }, [currentPage, limit]);
 
   useEffect(() => {
     filterAuthors();
@@ -131,6 +141,10 @@ const AuthorsPage: React.FC = () => {
     setDateFilter({ startDate, endDate });
   };
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
   return (
     <div>
       <PageHeader
@@ -162,7 +176,7 @@ const AuthorsPage: React.FC = () => {
       <SearchFilter
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
-        searchPlaceholder="Buscar por título, organizador ou ISBN..."
+        searchPlaceholder="Buscar por nome ou email..."
         dateFilter={dateFilter}
         onDateFilterChange={handleDateFilterChange}
         showDateFilter={false}
@@ -181,6 +195,12 @@ const AuthorsPage: React.FC = () => {
           onEdit={handleOpenModal}
           onDelete={handleDeleteAuthor}
           onViewStats={handleViewStats}
+        />
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
         />
       </DataFetchWrapper>
 

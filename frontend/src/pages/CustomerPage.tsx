@@ -4,31 +4,31 @@ import Button from '@/components/commons/Button';
 import DataFetchWrapper from '@/components/commons/DataFetching';
 import Modal from '@/components/commons/Modal';
 import Alert from '@/components/commons/Alert';
-import ClientForm from '@/components/clients/ClientForm';
-import ClientList from '@/components/clients/ClientList';
+import CustomerForm from '@/components/customers/CustomerForm';
+import CustomerList from '@/components/customers/CustomerList';
 import SearchFilter from '@/components/commons/SearchFilter';
-import { getClients, deleteClient, importClientsFromSales } from '@/services/clientService';
-import { IClient } from '@/types';
+import { getCustomers, deleteCustomer, importCustomersFromSales } from '@/services/customerService';
+import { ICustomer } from '@/types';
 
-const ClientsPage: React.FC = () => {
-  const [allClients, setAllClients] = useState<IClient[]>([]);
-  const [filteredClients, setFilteredClients] = useState<IClient[]>([]);
+const CustomersPage: React.FC = () => {
+  const [allCustomers, setAllCustomers] = useState<ICustomer[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<ICustomer[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [selectedClient, setSelectedClient] = useState<IClient | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<ICustomer | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
   const [isImporting, setIsImporting] = useState<boolean>(false);
 
-  const fetchClients = async () => {
+  const fetchCustomers = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getClients();
-      setAllClients(data);
-      setFilteredClients(data);
+      const data = await getCustomers();
+      setAllCustomers(data);
+      setFilteredCustomers(data);
       setLoading(false);
     } catch (error: any) {
       setError('Falha ao carregar os clientes. Por favor, tente novamente.');
@@ -38,22 +38,22 @@ const ClientsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchClients();
+    fetchCustomers();
   }, []);
 
   useEffect(() => {
-    filterClients();
-  }, [searchTerm, dateFilter, allClients]);
+    filterCustomers();
+  }, [searchTerm, dateFilter, allCustomers]);
 
-  const filterClients = () => {
-    let filtered = [...allClients];
+  const filterCustomers = () => {
+    let filtered = [...allCustomers];
 
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(client =>
-        client.name.toLowerCase().includes(term) ||
-        (client.email && client.email.toLowerCase().includes(term)) ||
-        (client.phone && client.phone.includes(term))
+      filtered = filtered.filter(customer =>
+        customer.name.toLowerCase().includes(term) ||
+        (customer.email && customer.email.toLowerCase().includes(term)) ||
+        (customer.phone && customer.phone.includes(term))
       );
     }
 
@@ -61,32 +61,32 @@ const ClientsPage: React.FC = () => {
       const startDate = new Date(dateFilter.startDate).setHours(0, 0, 0, 0);
       const endDate = new Date(dateFilter.endDate).setHours(23, 59, 59, 999);
 
-      filtered = filtered.filter(client => {
-        if (!client.createdAt) return true;
-        const createdAt = new Date(client.createdAt).getTime();
+      filtered = filtered.filter(customer => {
+        if (!customer.createdAt) return true;
+        const createdAt = new Date(customer.createdAt).getTime();
         return createdAt >= startDate && createdAt <= endDate;
       });
     }
 
-    setFilteredClients(filtered);
+    setFilteredCustomers(filtered);
   };
 
-  const handleOpenModal = (client: IClient | null = null) => {
-    setSelectedClient(client);
+  const handleOpenModal = (customer: ICustomer | null = null) => {
+    setSelectedCustomer(customer);
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setSelectedClient(null);
+    setSelectedCustomer(null);
   };
 
   const handleSaveSuccess = () => {
     handleCloseModal();
-    fetchClients();
+    fetchCustomers();
     setAlert({
       type: 'success',
-      message: selectedClient ? 'Cliente atualizado com sucesso!' : 'Cliente adicionado com sucesso!'
+      message: selectedCustomer ? 'Cliente atualizado com sucesso!' : 'Cliente adicionado com sucesso!'
     });
 
     setTimeout(() => {
@@ -94,11 +94,11 @@ const ClientsPage: React.FC = () => {
     }, 5000);
   };
 
-  const handleDeleteClient = async (id: string) => {
+  const handleDeleteCustomer = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
       try {
-        await deleteClient(id);
-        fetchClients();
+        await deleteCustomer(id);
+        fetchCustomers();
         setAlert({ type: 'success', message: 'Cliente excluído com sucesso!' });
 
         setTimeout(() => {
@@ -122,11 +122,11 @@ const ClientsPage: React.FC = () => {
     if (window.confirm('Deseja importar clientes das vendas registradas? Isso criará novos registros de clientes com base nos dados das vendas.')) {
       try {
         setIsImporting(true);
-        const result = await importClientsFromSales();
-        fetchClients();
+        const result = await importCustomersFromSales();
+        fetchCustomers();
         setAlert({
           type: 'success',
-          message: `${result.clientsCreated.length} clientes importados com sucesso!`
+          message: `${result.customersCreated.length} clientes importados com sucesso!`
         });
         setIsImporting(false);
 
@@ -153,17 +153,17 @@ const ClientsPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <div className="px-4 sm:px-6 lg:px-8 max-w-full mx-auto">
       <PageHeader
         title="Clientes"
         subtitle="Gerencie os clientes da editora"
         actions={
-          <div className="flex space-x-2">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
             <Button
               variant="secondary"
               onClick={handleImportFromSales}
               disabled={isImporting}
-              className="flex items-center"
+              className="w-full sm:w-auto flex items-center justify-center"
             >
               {isImporting ? (
                 <div className="animate-spin mr-2 h-4 w-4 text-white">
@@ -182,7 +182,7 @@ const ClientsPage: React.FC = () => {
             <Button
               variant="primary"
               onClick={() => handleOpenModal()}
-              className="flex items-center"
+              className="w-full sm:w-auto flex items-center justify-center"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -202,38 +202,42 @@ const ClientsPage: React.FC = () => {
         />
       )}
 
-      <SearchFilter
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        searchPlaceholder="Buscar por título, organizador ou ISBN..."
-        dateFilter={dateFilter}
-        onDateFilterChange={handleDateFilterChange}
-        showDateFilter={false}
-        className="mb-6"
-      />
-
-      <DataFetchWrapper
-        loading={loading}
-        error={error}
-        isEmpty={filteredClients.length === 0}
-        emptyMessage="Nenhum cliente encontrado. Clique em 'Novo Cliente' para adicionar."
-        onRetry={fetchClients}
-      >
-        <ClientList
-          clients={filteredClients}
-          onEdit={handleOpenModal}
-          onDelete={handleDeleteClient}
+      <div className="mb-6">
+        <SearchFilter
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          searchPlaceholder="Buscar por nome, email ou telefone..."
+          dateFilter={dateFilter}
+          onDateFilterChange={handleDateFilterChange}
+          showDateFilter={false}
+          className="flex flex-col md:flex-row gap-2"
         />
-      </DataFetchWrapper>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <DataFetchWrapper
+          loading={loading}
+          error={error}
+          isEmpty={filteredCustomers.length === 0}
+          emptyMessage="Nenhum cliente encontrado. Clique em 'Novo Cliente' para adicionar."
+          onRetry={fetchCustomers}
+        >
+          <CustomerList
+            customers={filteredCustomers}
+            onEdit={handleOpenModal}
+            onDelete={handleDeleteCustomer}
+          />
+        </DataFetchWrapper>
+      </div>
 
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={selectedClient ? 'Editar Cliente' : 'Novo Cliente'}
+        title={selectedCustomer ? 'Editar Cliente' : 'Novo Cliente'}
       >
         {isModalOpen && (
-          <ClientForm
-            client={selectedClient}
+          <CustomerForm
+            customer={selectedCustomer}
             onCancel={handleCloseModal}
             onSave={handleSaveSuccess}
           />
@@ -243,4 +247,4 @@ const ClientsPage: React.FC = () => {
   );
 };
 
-export default ClientsPage;
+export default CustomersPage;

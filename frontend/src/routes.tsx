@@ -4,7 +4,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import Dashboard from '@/pages/Dashboard';
 import BooksPage from '@/pages/BooksPage';
 import AuthorsPage from '@/pages/AuthorsPage';
-import ClientsPage from '@/pages/ClientsPage';
+import CustomersPage from '@/pages/CustomerPage';
 import SalesPage from '@/pages/SalesPage';
 import CommissionsPage from '@/pages/CommissionsPage';
 import NotFound from '@/pages/NotFoundPage';
@@ -19,7 +19,7 @@ const AppRoutes: React.FC = () => {
           <Route path="dashboard" element={<Navigate to="/" replace />} />
           <Route path="books" element={<BooksPage />} />
           <Route path="authors" element={<AuthorsPage />} />
-          <Route path="clients" element={<ClientsPage />} />
+          <Route path="customers" element={<CustomersPage />} />
           <Route path="sales" element={<SalesPage />} />
           <Route path="commissions" element={<CommissionsPage />} />
           <Route path="*" element={<NotFound />} />

@@ -21,14 +21,13 @@ const App: React.FC = () => {
         pauseOnFocusLoss
         draggable
         pauseOnHover
-        // Limitar o tamanho do toast
         style={{ maxWidth: '350px' }}
         toastStyle={{
           maxHeight: '150px',
           overflow: 'auto',
           fontSize: '14px'
         }}
-        limit={3} // Limita o número de toasts visíveis simultaneamente
+        limit={3}
       />
     </BrowserRouter>
   );

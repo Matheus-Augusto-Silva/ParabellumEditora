@@ -1,15 +1,15 @@
 import React from 'react';
-import { IClient } from '@/types';
+import { ICustomer } from '@/types';
 import Table from '@/components/commons/Table';
 import Button from '@/components/commons/Button';
 
-interface ClientListProps {
-  clients: IClient[];
-  onEdit: (client: IClient) => void;
+interface CustomerListProps {
+  customers: ICustomer[];
+  onEdit: (customer: ICustomer) => void;
   onDelete: (id: string) => void;
 }
 
-const ClientList: React.FC<ClientListProps> = ({ clients, onEdit, onDelete }) => {
+const CustomerList: React.FC<CustomerListProps> = ({ customers, onEdit, onDelete }) => {
   const columns = [
     {
       header: 'Nome',
@@ -18,29 +18,29 @@ const ClientList: React.FC<ClientListProps> = ({ clients, onEdit, onDelete }) =>
     {
       header: 'Email',
       accessor: 'email',
-      render: (client: IClient) => client.email || '-'
+      render: (customer: ICustomer) => customer.email || '-'
     },
     {
       header: 'Telefone',
       accessor: 'phone',
-      render: (client: IClient) => client.phone || '-'
+      render: (customer: ICustomer) => customer.phone || '-'
     },
     {
       header: 'Data de Cadastro',
       accessor: 'createdAt',
-      render: (client: IClient) => client.createdAt ? new Date(client.createdAt).toLocaleDateString('pt-BR') : '-'
+      render: (customer: ICustomer) => customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('pt-BR') : '-'
     },
     {
       header: 'Ações',
       accessor: '_id',
-      render: (client: IClient) => (
+      render: (customer: ICustomer) => (
         <div className="flex space-x-2">
           <Button
             variant="primary"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              onEdit(client);
+              onEdit(customer);
             }}
           >
             Editar
@@ -50,7 +50,7 @@ const ClientList: React.FC<ClientListProps> = ({ clients, onEdit, onDelete }) =>
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              onDelete(client._id);
+              onDelete(customer._id);
             }}
           >
             Excluir
@@ -64,13 +64,13 @@ const ClientList: React.FC<ClientListProps> = ({ clients, onEdit, onDelete }) =>
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <Table
         columns={columns}
-        data={clients}
-        keyExtractor={(client) => client._id}
+        data={customers}
+        keyExtractor={(customer) => customer._id}
         onRowClick={onEdit}
-        emptyMessage="Nenhum cliente encontrado"
+        emptyMessage="Nenhum customere encontrado"
       />
     </div>
   );
 };
 
-export default ClientList;
+export default CustomerList;

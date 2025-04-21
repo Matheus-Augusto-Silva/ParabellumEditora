@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import Input from '@/components/commons/Input';
 import Button from '@/components/commons/Button';
-import { IClient } from '@/types';
-import { createClient, updateClient } from '@/services/clientService';
+import { ICustomer } from '@/types';
+import { createCustomer, updateCustomer } from '@/services/customerService';
 import InputMask from 'react-input-mask';
 
-interface ClientFormProps {
-  client: IClient | null;
+interface CustomerFormProps {
+  customer: ICustomer | null;
   onCancel: () => void;
   onSave: () => void;
 }
 
-const ClientForm: React.FC<ClientFormProps> = ({ client, onCancel, onSave }) => {
+const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onCancel, onSave }) => {
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
@@ -19,12 +19,12 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onCancel, onSave }) => 
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (client) {
-      setName(client.name);
-      setEmail(client.email || '');
-      setPhone(client.phone || '');
+    if (customer) {
+      setName(customer.name);
+      setEmail(customer.email || '');
+      setPhone(customer.phone || '');
     }
-  }, [client]);
+  }, [customer]);
 
   const validate = (): boolean => {
     const newErrors: { [key: string]: string } = {};
@@ -56,22 +56,22 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onCancel, onSave }) => 
     setLoading(true);
 
     try {
-      const clientData = {
+      const customerData = {
         name,
         email: email || undefined,
         phone: phone || undefined
       };
 
-      if (client) {
-        await updateClient(client._id, clientData);
+      if (customer) {
+        await updateCustomer(customer._id, customerData);
       } else {
-        await createClient(clientData);
+        await createCustomer(customerData);
       }
 
       setLoading(false);
       onSave();
     } catch (error) {
-      console.error('Erro ao salvar cliente:', error);
+      console.error('Erro ao salvar customere:', error);
       setLoading(false);
     }
   };
@@ -83,7 +83,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onCancel, onSave }) => 
         label="Nome"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Digite o nome do cliente"
+        placeholder="Digite o nome do customere"
         error={errors.name}
         required
       />
@@ -94,7 +94,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onCancel, onSave }) => 
         type="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="Digite o email do cliente (opcional)"
+        placeholder="Digite o email do customere (opcional)"
         error={errors.email}
       />
 
@@ -132,11 +132,11 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onCancel, onSave }) => 
           variant="primary"
           disabled={loading}
         >
-          {loading ? 'Salvando...' : client ? 'Atualizar' : 'Criar'}
+          {loading ? 'Salvando...' : customer ? 'Atualizar' : 'Criar'}
         </Button>
       </div>
     </form>
   );
 };
 
-export default ClientForm;
+export default CustomerForm;

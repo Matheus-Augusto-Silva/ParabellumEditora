@@ -2,12 +2,14 @@ import { Request, Response } from 'express';
 import asyncHandler from 'express-async-handler';
 import Sale from '../models/Sale';
 import Book from '../models/Book';
+import Customer from '../models/Customer';
 import { ISaleStats } from '../types';
 import csv from 'csv-parser';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
+
 
 const mapPlatform = (platformInput: string): string => {
   const platform = platformInput.trim().toUpperCase();
@@ -318,15 +320,39 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
   }
 
   const results: any[] = [];
+  const customersCreated: any[] = [];
   const errors: string[] = [];
   const notFoundBooksMap: Map<string, number> = new Map();
   const duplicateSalesMap: Map<string, number> = new Map();
+  const canceledSalesMap: Map<string, number> = new Map();
+
   const source = req.body.source || 'editora';
+  const importCustomers = req.body.importCustomers !== 'false';
+  const allowZeroPrices = req.body.allowZeroPrices === 'true';
 
   const isExcel = req.file.originalname.endsWith('.xlsx') || req.file.originalname.endsWith('.xls');
 
-  if (isExcel) {
-    try {
+  const normalizePrice = (priceValue: any): number => {
+    if (priceValue === undefined || priceValue === null || priceValue === '') {
+      return 0;
+    }
+
+    if (typeof priceValue === 'number') {
+      return priceValue;
+    }
+
+    let priceStr = String(priceValue);
+    priceStr = priceStr.replace(/[R$€$£\s]/g, '');
+    priceStr = priceStr.replace(',', '.');
+
+    const price = parseFloat(priceStr);
+    return isNaN(price) ? 0 : price;
+  };
+
+  try {
+    let data: any[] = [];
+
+    if (isExcel) {
       const workbook = XLSX.read(req.file.buffer, {
         type: 'buffer',
         cellDates: true
@@ -334,280 +360,262 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
 
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
+      data = XLSX.utils.sheet_to_json(worksheet);
+    } else {
+      const csvString = req.file.buffer.toString('utf8');
+      const results = await new Promise<any[]>((resolve) => {
+        const rows: any[] = [];
+        csv({ headers: true })
+          .on('data', (row) => rows.push(row))
+          .on('end', () => resolve(rows))
+          .write(csvString);
+      });
 
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      data = results;
+    }
 
-      for (const row of data) {
-        try {
-          const normalizedData: { [key: string]: any } = {};
-          Object.keys(row as object).forEach(key => {
-            normalizedData[key.toLowerCase().trim()] = (row as Record<string, any>)[key];
-          });
+    for (const row of data) {
+      try {
+        const normalizedData: { [key: string]: any } = {};
+        Object.keys(row as object).forEach(key => {
+          normalizedData[key.toLowerCase().trim()] = (row as Record<string, any>)[key];
+        });
 
-          let bookTitle = '';
-          let quantity = 0;
-          let salePrice = 0;
-          let orderNumber = '';
-          let saleDateStr = '';
+        let bookTitle = '';
+        let quantity = 0;
+        let salePrice = 0;
+        let orderNumber = '';
+        let saleDateStr = '';
+        let platform = '';
+        let status = 'completed';
 
-          // Extração para modelo WooCommerce (planilha do site)
-          if ('order_number' in normalizedData) {
-            orderNumber = normalizedData['order_number'] || '';
-            saleDateStr = normalizedData['order_date'] || '';
+        let customerName = '';
+        let customerEmail = '';
+        let customerPhone = '';
 
-            for (const key in normalizedData) {
-              if (key.startsWith('line_item_')) {
-                const lineItem = normalizedData[key];
-                if (lineItem && typeof lineItem === 'string') {
-                  const match = lineItem.match(/(.*) × (\d+) \((R\$[\d,]+)\)/);
-                  if (match) {
-                    bookTitle = match[1].trim();
-                    quantity = parseInt(match[2], 10);
-                    salePrice = parseFloat(match[3].replace('R$', '').replace(',', '.'));
-                    break;
-                  }
-                }
+        if (source === 'editora') {
+          orderNumber = normalizedData['pedido id'] || normalizedData['order number'] || '';
+          saleDateStr = normalizedData['data do pedido'] || normalizedData['order date'] || '';
+          status = (normalizedData['status do pedido'] || '').toLowerCase() === 'cancelado' ? 'canceled' : 'completed';
+
+          const firstName = normalizedData['billing first name'] || '';
+          const lastName = normalizedData['billing last name'] || '';
+          customerName = `${firstName} ${lastName}`.trim();
+          customerEmail = normalizedData['email para faturamento'] || normalizedData['email da conta do cliente'] || '';
+          customerPhone = normalizedData['billing phone'] || '';
+
+          let foundLineItem = false;
+          for (const key in normalizedData) {
+            if ((key.includes('item') || key.includes('produto') || key.includes('line_item')) && typeof normalizedData[key] === 'string') {
+              const lineItemValue = normalizedData[key];
+
+              const match1 = lineItemValue.match(/(.*) × (\d+) \((R\$[\d,.]+)\)/);
+              if (match1) {
+                bookTitle = match1[1].trim();
+                quantity = parseInt(match1[2], 10);
+                salePrice = normalizePrice(match1[3]);
+                foundLineItem = true;
+                break;
+              }
+
+              const match2 = lineItemValue.match(/(\d+) x (.*)/i);
+              if (match2) {
+                quantity = parseInt(match2[1], 10);
+                bookTitle = match2[2].trim();
+                foundLineItem = true;
               }
             }
-          } else {
-            // Extração para modelo de planilha de parceiros
-            bookTitle = normalizedData['título'] || normalizedData['nome do produto'] || '';
-            quantity = parseInt(normalizedData['quantidade'] || '0', 10);
-            salePrice = parseFloat(normalizedData['valor unitário cliente'] ||
-              normalizedData['valor unitário'] ||
-              (normalizedData['valor total capa'] / quantity) || '0');
-            saleDateStr = normalizedData['data venda'] || '';
-            orderNumber = normalizedData['pedido'] || '';
           }
 
-          let platform = normalizedData['canal'] || 'Site da Editora';
-
-          if (!bookTitle || !platform || isNaN(quantity) || isNaN(salePrice)) {
-            errors.push(`Dados inválidos: ${JSON.stringify(normalizedData)}`);
-            continue;
-          }
-
-          platform = mapPlatform(platform);
-          const saleDate = parseDate(saleDateStr);
-
-          if (orderNumber) {
-            const existingSale = await Sale.findOne({ orderNumber });
-            if (existingSale) {
-              const saleKey = `${bookTitle} - Pedido: ${orderNumber}`;
-              duplicateSalesMap.set(saleKey, (duplicateSalesMap.get(saleKey) || 0) + 1);
-              continue;
+          if (foundLineItem && (isNaN(salePrice) || salePrice <= 0)) {
+            salePrice = normalizePrice(normalizedData['total do pedido'] || 0);
+            if (salePrice > 0 && quantity > 1) {
+              salePrice = salePrice / quantity;
             }
           }
 
-          const isbn = normalizedData['sku'] || '';
-
-          let book;
-          if (isbn) {
-            book = await Book.findOne({ isbn });
+          if (!foundLineItem) {
+            bookTitle = normalizedData['título'] || normalizedData['title'] || '';
+            quantity = parseInt(normalizedData['quantidade'] || '1', 10);
+            salePrice = normalizePrice(normalizedData['total do pedido'] || normalizedData['order total'] || '0');
           }
 
-          if (!book) {
-            book = await Book.findOne({
-              title: { $regex: new RegExp(bookTitle.toString(), 'i') }
+          platform = 'Site da Editora';
+        } else {
+          bookTitle = normalizedData['título'] || normalizedData['nome do produto'] || normalizedData['livro'] || '';
+          quantity = parseInt(normalizedData['quantidade'] || '1', 10);
+          salePrice = normalizePrice(
+            normalizedData['valor unitário'] ||
+            normalizedData['preço'] ||
+            normalizedData['valor'] ||
+            normalizedData['valor unitário cliente'] || 0
+          );
+
+          platform = normalizedData['canal'] || normalizedData['plataforma'] || 'Outra plataforma';
+          orderNumber = normalizedData['pedido'] || normalizedData['id do pedido'] || '';
+          saleDateStr = normalizedData['data'] || normalizedData['data venda'] || '';
+          status = (normalizedData['status'] || '').toLowerCase() === 'cancelado' ? 'canceled' : 'completed';
+
+          customerName = normalizedData['cliente'] || normalizedData['nome do cliente'] || '';
+          customerEmail = normalizedData['email'] || normalizedData['email do cliente'] || '';
+          customerPhone = normalizedData['telefone'] || normalizedData['telefone do cliente'] || '';
+        }
+
+        if (!bookTitle) {
+          errors.push(`Linha ignorada: Título do livro não encontrado`);
+          continue;
+        }
+
+        if (isNaN(quantity) || quantity <= 0) {
+          quantity = 1;
+        }
+
+        const saleDate = parseDate(saleDateStr);
+
+        platform = mapPlatform(platform);
+
+        if (orderNumber) {
+          const existingSale = await Sale.findOne({ orderNumber });
+          if (existingSale) {
+            const saleKey = `${bookTitle} - Pedido: ${orderNumber}`;
+            duplicateSalesMap.set(saleKey, (duplicateSalesMap.get(saleKey) || 0) + 1);
+            continue;
+          }
+        }
+
+        if (status === 'canceled') {
+          canceledSalesMap.set(bookTitle, (canceledSalesMap.get(bookTitle) || 0) + 1);
+        }
+
+        const isbn = normalizedData['sku'] || normalizedData['isbn'] || '';
+
+        let book;
+        if (isbn) {
+          book = await Book.findOne({ isbn });
+        }
+
+        if (!book) {
+          book = await Book.findOne({
+            title: { $regex: new RegExp(bookTitle.toString(), 'i') }
+          });
+        }
+
+        if (!book) {
+          const bookKey = `${bookTitle}${isbn ? ` (ISBN: ${isbn})` : ''}`;
+          notFoundBooksMap.set(bookKey, (notFoundBooksMap.get(bookKey) || 0) + 1);
+          continue;
+        }
+
+        if (isNaN(salePrice) || salePrice <= 0) {
+          if (book && book.price > 0) {
+            salePrice = book.price;
+          } else if (!allowZeroPrices) {
+            errors.push(`Linha ignorada: Preço inválido para o livro "${bookTitle}"`);
+            continue;
+          }
+        }
+
+        await book.populate('author');
+        const authorId = book.author._id;
+
+        let customerId = undefined;
+        if (importCustomers && (customerEmail || (customerName && customerPhone))) {
+          let customer;
+
+          if (customerEmail) {
+            customer = await Customer.findOne({ email: customerEmail });
+          } else if (customerName && customerPhone) {
+            customer = await Customer.findOne({
+              name: customerName,
+              phone: customerPhone
             });
           }
 
-          if (!book) {
-            const bookKey = `${bookTitle}${isbn ? ` (ISBN: ${isbn})` : ''}`;
-            notFoundBooksMap.set(bookKey, (notFoundBooksMap.get(bookKey) || 0) + 1);
-            continue;
+          if (!customer && (customerName || customerEmail)) {
+            customer = new Customer({
+              name: customerName || 'Cliente sem nome',
+              email: customerEmail || undefined,
+              phone: customerPhone || undefined
+            });
+
+            await customer.save();
+            customersCreated.push(customer);
           }
 
-          await book.populate('author');
-          const authorId = book.author._id;
-
-          const sale = new Sale({
-            book: book._id,
-            author: authorId,
-            platform,
-            saleDate,
-            quantity,
-            salePrice,
-            orderNumber,
-            isProcessed: false,
-            source
-          });
-
-          await sale.save();
-          results.push(sale);
-        } catch (error) {
-          errors.push(`Erro ao processar linha: ${error instanceof Error ? error.message : String(error)}`);
+          if (customer) {
+            customerId = customer._id;
+          }
         }
+
+        const saleData: any = {
+          book: book._id,
+          author: authorId,
+          platform,
+          saleDate,
+          quantity,
+          salePrice,
+          orderNumber,
+          isProcessed: false,
+          source,
+          status
+        };
+
+        if (customerId) {
+          saleData.customer = customerId;
+        }
+
+        if (customerName) saleData.customerName = customerName;
+        if (customerEmail) saleData.customerEmail = customerEmail;
+        if (customerPhone) saleData.customerPhone = customerPhone;
+
+        const sale = new Sale(saleData);
+        await sale.save();
+        results.push(sale);
+
+      } catch (error) {
+        errors.push(`Erro ao processar linha: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      res.status(500);
-      throw new Error(`Erro ao importar vendas do Excel: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  } else {
-    const tmpDir = path.join(__dirname, '../../tmp');
-    if (!fs.existsSync(tmpDir)) {
-      fs.mkdirSync(tmpDir);
     }
 
-    const filePath = path.join(tmpDir, req.file.originalname);
-    fs.writeFileSync(filePath, req.file.buffer);
-
-    const processFile = (): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        fs.createReadStream(filePath)
-          .pipe(csv())
-          .on('data', async (data: any) => {
-            try {
-              const normalizedData: { [key: string]: string } = {};
-              Object.keys(data).forEach(key => {
-                const normalizedKey = key.trim().toLowerCase();
-                normalizedData[normalizedKey] = data[key];
-              });
-
-              let bookTitle = '';
-              let quantity = 0;
-              let salePrice = 0;
-              let orderNumber = '';
-              let saleDateStr = '';
-              let platform = '';
-
-              // Planilha do site
-              if ('order_number' in normalizedData) {
-                orderNumber = normalizedData['order_number'] || '';
-                saleDateStr = normalizedData['order_date'] || '';
-
-                for (const key in normalizedData) {
-                  if (key.startsWith('line_item_')) {
-                    const lineItem = normalizedData[key];
-                    if (lineItem && typeof lineItem === 'string') {
-                      const match = lineItem.match(/(.*) × (\d+) \((R\$[\d,]+)\)/);
-                      if (match) {
-                        bookTitle = match[1].trim();
-                        quantity = parseInt(match[2], 10);
-                        salePrice = parseFloat(match[3].replace('R$', '').replace(',', '.'));
-                        break;
-                      }
-                    }
-                  }
-                }
-                platform = 'Site da Editora';
-              } else {
-                // Planilha dos parceirops
-                bookTitle = normalizedData.booktitle || normalizedData.title;
-                platform = normalizedData.platform;
-                saleDateStr = normalizedData.saledate || normalizedData.date;
-                quantity = parseInt(normalizedData.quantity, 10);
-                salePrice = parseFloat(normalizedData.saleprice || normalizedData.price);
-                orderNumber = normalizedData.ordernumber || normalizedData.order;
-              }
-
-              const isbn = normalizedData.isbn || '';
-
-              if (!bookTitle || !platform || !saleDateStr || isNaN(quantity) || isNaN(salePrice)) {
-                errors.push(`Dados inválidos: ${JSON.stringify(data)}`);
-                return;
-              }
-
-              platform = mapPlatform(platform);
-              const saleDate = parseDate(saleDateStr);
-
-              if (orderNumber) {
-                const existingSale = await Sale.findOne({ orderNumber });
-                if (existingSale) {
-                  const saleKey = `${bookTitle} - Pedido: ${orderNumber}`;
-                  duplicateSalesMap.set(saleKey, (duplicateSalesMap.get(saleKey) || 0) + 1);
-                  return;
-                }
-              }
-
-              let book;
-              if (isbn) {
-                book = await Book.findOne({ isbn });
-              }
-
-              if (!book) {
-                book = await Book.findOne({
-                  title: { $regex: new RegExp(bookTitle, 'i') }
-                });
-              }
-
-              if (!book) {
-                const bookKey = `${bookTitle}${isbn ? ` (ISBN: ${isbn})` : ''}`;
-                notFoundBooksMap.set(bookKey, (notFoundBooksMap.get(bookKey) || 0) + 1);
-                return;
-              }
-
-              await book.populate('author');
-              const authorId = book.author._id;
-
-              const sale = new Sale({
-                book: book._id,
-                author: authorId,
-                platform,
-                saleDate,
-                quantity,
-                salePrice,
-                orderNumber,
-                isProcessed: false,
-                source
-              });
-
-              await sale.save();
-              results.push(sale);
-            } catch (error) {
-              errors.push(`Erro ao processar linha: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          })
-          .on('end', () => {
-            fs.unlinkSync(filePath);
-            resolve();
-          })
-          .on('error', (error) => {
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-            }
-            reject(error);
-          });
-      });
-    };
-
-    try {
-      await processFile();
-    } catch (error) {
-      res.status(500);
-      throw new Error(`Erro ao importar vendas: ${error instanceof Error ? error.message : String(error)}`);
+    const populatedSales = [];
+    for (const sale of results) {
+      const populatedSale = await Sale.findById(sale._id)
+        .populate({
+          path: 'book',
+          populate: {
+            path: 'author',
+            select: 'name commissionRate'
+          }
+        });
+      populatedSales.push(populatedSale);
     }
+
+    const notFoundBooks = Array.from(notFoundBooksMap.entries()).map(
+      ([book, count]) => count > 1 ? `${book} (${count} ocorrências)` : book
+    );
+
+    const duplicateSales = Array.from(duplicateSalesMap.entries()).map(
+      ([sale, count]) => count > 1 ? `${sale} (${count} ocorrências)` : sale
+    );
+
+    const canceledSales = Array.from(canceledSalesMap.entries()).map(
+      ([book, count]) => count > 1 ? `${book} (${count} ocorrências)` : book
+    );
+
+    res.status(201).json({
+      message: `${results.length} vendas importadas com sucesso${errors.length > 0 || notFoundBooks.length > 0 || duplicateSales.length > 0 ? ' (com alguns problemas)' : ''}`,
+      salesCreated: populatedSales,
+      customersCreated: customersCreated.length,
+      errors: errors.length > 0 ? errors : undefined,
+      notFoundBooks: notFoundBooks.length > 0 ? notFoundBooks : undefined,
+      duplicateSales: duplicateSales.length > 0 ? duplicateSales : undefined,
+      canceledSales: canceledSales.length > 0 ? canceledSales : undefined
+    });
+
+  } catch (error) {
+    res.status(500);
+    throw new Error(`Erro ao importar vendas: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  const populatedSales = [];
-  for (const sale of results) {
-    const populatedSale = await Sale.findById(sale._id)
-      .populate({
-        path: 'book',
-        populate: {
-          path: 'author',
-          select: 'name commissionRate'
-        }
-      })
-      .populate('author', 'name commissionRate');
-    populatedSales.push(populatedSale);
-  }
-
-  const notFoundBooks = Array.from(notFoundBooksMap.entries()).map(
-    ([book, count]) => count > 1 ? `${book} (${count} ocorrências)` : book
-  );
-
-  const duplicateSales = Array.from(duplicateSalesMap.entries()).map(
-    ([sale, count]) => count > 1 ? `${sale} (${count} ocorrências)` : sale
-  );
-
-  res.status(201).json({
-    message: `${results.length} vendas importadas com sucesso${errors.length > 0 || notFoundBooks.length > 0 || duplicateSales.length > 0 ? ' (com alguns problemas)' : ''}`,
-    salesCreated: populatedSales,
-    errors: errors.length > 0 ? errors : undefined,
-    notFoundBooks: notFoundBooks.length > 0 ? notFoundBooks : undefined,
-    duplicateSales: duplicateSales.length > 0 ? duplicateSales : undefined
-  });
 });
 
 export const deleteSale = asyncHandler(async (req: Request, res: Response): Promise<void> => {

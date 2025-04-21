@@ -10,7 +10,7 @@ import authorRoutes from './routes/authorRoutes';
 import bookRoutes from './routes/bookRoutes';
 import saleRoutes from './routes/saleRoutes';
 import commissionRoutes from './routes/commissionRoutes';
-import clientRoutes from './routes/clientRoutes';
+import customerRoutes from './routes/customerRoutes';
 
 dotenv.config();
 
@@ -31,7 +31,7 @@ app.use('/api/authors', authorRoutes);
 app.use('/api/books', bookRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/commissions', commissionRoutes);
-app.use('/api/clients', clientRoutes);
+app.use('/api/customers', customerRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'API da Editora Parabellum' });

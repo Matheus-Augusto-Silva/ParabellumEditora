@@ -1,3 +1,5 @@
+import { ReactNode } from "react";
+
 export interface IAuthor {
   _id: string;
   name: string;
@@ -14,7 +16,7 @@ export interface IAuthor {
   updatedAt?: string;
 }
 
-export interface IClient {
+export interface ICustomer {
   _id: string;
   name: string;
   email?: string;
@@ -46,7 +48,7 @@ export interface ISale {
   source?: string;
   commission?: string;
   status?: 'completed' | 'canceled';
-  client?: IClient | string;
+  customer?: ICustomer | string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -103,6 +105,7 @@ export interface ISaleStats {
 }
 
 export interface IPendingCommissions {
+  count: ReactNode;
   commissions: never[];
   pendingCommissions: ICommission[];
   totalPending: number;

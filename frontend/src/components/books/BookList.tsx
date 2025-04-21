@@ -76,7 +76,7 @@ const BookList: React.FC<BookListProps> = ({ books, onEdit, onDelete }) => {
       )
     },
     {
-      header: 'Preço',
+      header: 'Preço de referência ',
       accessor: 'price',
       render: (book: IBook) => (
         <span className="text-gray-900 font-medium">{formatCurrency(book.price || 0)}</span>

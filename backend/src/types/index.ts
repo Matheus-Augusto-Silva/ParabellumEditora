@@ -33,7 +33,7 @@ export interface ISale extends Document {
   createdAt: Date;
   updatedAt: Date;
   source?: string;
-  client?: Types.ObjectId | IClient;
+  customer?: Types.ObjectId | ICustomer;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -43,15 +43,10 @@ export interface ISale extends Document {
   customerPostalCode?: string;
 }
 
-export interface IClient extends Document {
+export interface ICustomer extends Document {
   name: string;
   email?: string;
   phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
