@@ -37,6 +37,7 @@ const SaleForm: React.FC<SaleFormProps> = ({ sale, onCancel, onSave }) => {
     fetchBooks();
 
     if (sale) {
+      console.log('Sale data:', sale);
       setSelectedBook(typeof sale.book === 'object' ? sale.book._id : sale.book);
       setPlatform(sale.platform);
       setQuantity(sale.quantity);

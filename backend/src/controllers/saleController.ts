@@ -30,8 +30,14 @@ const mapPlatform = (platformInput: string): string => {
   return platformMap[platform] || 'Outra plataforma';
 };
 
-const parseDate = (dateStr: string): Date => {
-  if (!dateStr) return new Date();
+const parseDate = (dateStr: any): Date => {
+  if (dateStr instanceof Date) {
+    return new Date(dateStr);
+  }
+
+  if (!dateStr || typeof dateStr !== 'string') {
+    return new Date();
+  }
 
   let date;
 
@@ -59,6 +65,18 @@ const parseDate = (dateStr: string): Date => {
         } else {
           date = new Date(year, month, day);
         }
+      }
+    }
+  }
+  else if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        date = new Date(year, month, day);
       }
     }
   }
@@ -316,7 +334,7 @@ export const getSalesStats = asyncHandler(async (req: Request, res: Response): P
 export const importSales = asyncHandler(async (req: Request & { file?: Express.Multer.File }, res: Response): Promise<void> => {
   if (!req.file) {
     res.status(400);
-    throw new Error('Por favor, envie um arquivo CSV ou XLSX.');
+    throw new Error('Por favor, envie um arquivo XLSX.');
   }
 
   const results: any[] = [];
@@ -326,9 +344,10 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
   const duplicateSalesMap: Map<string, number> = new Map();
   const canceledSalesMap: Map<string, number> = new Map();
 
-  const source = req.body.source || 'editora';
+  const source = req.body.source
   const importCustomers = req.body.importCustomers !== 'false';
   const allowZeroPrices = req.body.allowZeroPrices === 'true';
+  const autoDetectSource = req.body.autoDetectSource === 'true';
 
   const isExcel = req.file.originalname.endsWith('.xlsx') || req.file.originalname.endsWith('.xls');
 
@@ -355,7 +374,10 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
     if (isExcel) {
       const workbook = XLSX.read(req.file.buffer, {
         type: 'buffer',
-        cellDates: true
+        cellDates: true,
+        dateNF: 'yyyy-mm-dd',
+        cellNF: true,
+        raw: false
       });
 
       const sheetName = workbook.SheetNames[0];
@@ -373,6 +395,58 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
 
       data = results;
     }
+    const detectSourceFromData = (data: any[]): string => {
+      if (!data || data.length === 0) return 'editora';
+      const firstRow = data[0];
+      const keys = Object.keys(firstRow).map(k => k.toLowerCase().trim());
+
+      const editoraIndicators = [
+        'pedido id',
+        'pedido key',
+        'Data do Pedido',
+        'billing first name',
+        'billing last name',
+        'email para faturamento',
+        'email da conta do cliente',
+        'billing phone',
+        'shipping',
+        'mercado pago'
+      ];
+
+      const parceiraIndicators = [
+        'canal',
+        'plataforma',
+        'marketplace',
+        'valor unitário',
+        'id do pedido'
+      ];
+
+      let editoraCount = 0;
+      let parceiraCount = 0;
+
+      for (const key of keys) {
+        if (editoraIndicators.some(indicator => key.includes(indicator))) {
+          editoraCount++;
+        }
+        if (parceiraIndicators.some(indicator => key.includes(indicator))) {
+          parceiraCount++;
+        }
+      }
+
+      if (editoraCount > parceiraCount) {
+        return 'editora';
+      }
+
+      if (parceiraCount > editoraCount) {
+        return 'parceira';
+      }
+      if (keys.includes('pedido id') || keys.includes('billing first name')) {
+        return 'editora';
+      }
+      return 'editora';
+    }
+
+    const detectedSource = autoDetectSource ? detectSourceFromData(data) : source;
 
     for (const row of data) {
       try {
@@ -393,10 +467,22 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
         let customerEmail = '';
         let customerPhone = '';
 
-        if (source === 'editora') {
-          orderNumber = normalizedData['pedido id'] || normalizedData['order number'] || '';
-          saleDateStr = normalizedData['data do pedido'] || normalizedData['order date'] || '';
-          status = (normalizedData['status do pedido'] || '').toLowerCase() === 'cancelado' ? 'canceled' : 'completed';
+        if (detectedSource === 'editora') {
+          orderNumber = normalizedData['pedido id'] || normalizedData['pedido key'] || normalizedData['order number'] || '';
+
+          saleDateStr = (row as Record<string, any>)['Data do Pedido'] ||
+            normalizedData['data do pedido'] ||
+            normalizedData['Data do Pedido'] ||
+            normalizedData['order date'] || '';
+
+          if (saleDateStr instanceof Date) {
+            const year = saleDateStr.getFullYear();
+            const month = String(saleDateStr.getMonth() + 1).padStart(2, '0');
+            const day = String(saleDateStr.getDate()).padStart(2, '0');
+            saleDateStr = `${year}-${month}-${day}`;
+          }
+
+          status = (normalizedData['Status do Pedido'] || '').toLowerCase() === 'cancelado' ? 'canceled' : 'completed';
 
           const firstName = normalizedData['billing first name'] || '';
           const lastName = normalizedData['billing last name'] || '';
@@ -405,8 +491,10 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
           customerPhone = normalizedData['billing phone'] || '';
 
           let foundLineItem = false;
+
           for (const key in normalizedData) {
-            if ((key.includes('item') || key.includes('produto') || key.includes('line_item')) && typeof normalizedData[key] === 'string') {
+            if ((key.includes('item') || key.includes('produto') || key.includes('line_item')) &&
+              typeof normalizedData[key] === 'string') {
               const lineItemValue = normalizedData[key];
 
               const match1 = lineItemValue.match(/(.*) × (\d+) \((R\$[\d,.]+)\)/);
@@ -442,23 +530,88 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
 
           platform = 'Site da Editora';
         } else {
-          bookTitle = normalizedData['título'] || normalizedData['nome do produto'] || normalizedData['livro'] || '';
-          quantity = parseInt(normalizedData['quantidade'] || '1', 10);
+          bookTitle =
+            normalizedData['título'] ||
+            normalizedData['nome do produto'] ||
+            normalizedData['livro'] ||
+            normalizedData['produto'] ||
+            normalizedData['título do produto'] ||
+            normalizedData['nome'] ||
+            normalizedData['descrição'] ||
+            '';
+
+          quantity = parseInt(
+            normalizedData['quantidade'] ||
+            normalizedData['qtd'] ||
+            normalizedData['qtde'] ||
+            normalizedData['quantidade vendida'] ||
+            '1', 10);
+
           salePrice = normalizePrice(
             normalizedData['valor unitário'] ||
             normalizedData['preço'] ||
             normalizedData['valor'] ||
-            normalizedData['valor unitário cliente'] || 0
+            normalizedData['preço unitário'] ||
+            normalizedData['preço de venda'] ||
+            normalizedData['valor unitário cliente'] ||
+            normalizedData['preço final'] ||
+            normalizedData['valor total'] || 0
           );
 
-          platform = normalizedData['canal'] || normalizedData['plataforma'] || 'Outra plataforma';
-          orderNumber = normalizedData['pedido'] || normalizedData['id do pedido'] || '';
-          saleDateStr = normalizedData['data'] || normalizedData['data venda'] || '';
-          status = (normalizedData['status'] || '').toLowerCase() === 'cancelado' ? 'canceled' : 'completed';
+          if (salePrice > 0 && quantity > 1 && normalizedData['valor total']) {
+            const totalValue = normalizePrice(normalizedData['valor total']);
+            if (totalValue > 0) {
+              salePrice = totalValue / quantity;
+            }
+          }
 
-          customerName = normalizedData['cliente'] || normalizedData['nome do cliente'] || '';
-          customerEmail = normalizedData['email'] || normalizedData['email do cliente'] || '';
-          customerPhone = normalizedData['telefone'] || normalizedData['telefone do cliente'] || '';
+          platform =
+            normalizedData['canal'] ||
+            normalizedData['plataforma'] ||
+            normalizedData['marketplace'] ||
+            normalizedData['loja'] ||
+            'Outra plataforma';
+
+          orderNumber =
+            normalizedData['pedido'] ||
+            normalizedData['id do pedido'] ||
+            normalizedData['número do pedido'] ||
+            normalizedData['nro pedido'] ||
+            normalizedData['código'] ||
+            '';
+
+          saleDateStr =
+            normalizedData['data'] ||
+            normalizedData['data venda'] ||
+            normalizedData['data da venda'] ||
+            normalizedData['data pedido'] ||
+            '';
+
+          const statusValue =
+            normalizedData['status'] ||
+            normalizedData['situação'] ||
+            '';
+
+          status = /(cancelado|cancelled|canceled|devolvido|returned)/i.test(statusValue) ? 'canceled' : 'completed';
+
+          customerName =
+            normalizedData['cliente'] ||
+            normalizedData['nome do cliente'] ||
+            normalizedData['comprador'] ||
+            '';
+
+          customerEmail =
+            normalizedData['email'] ||
+            normalizedData['email do cliente'] ||
+            normalizedData['e-mail'] ||
+            '';
+
+          customerPhone =
+            normalizedData['telefone'] ||
+            normalizedData['telefone do cliente'] ||
+            normalizedData['contato'] ||
+            normalizedData['celular'] ||
+            '';
         }
 
         if (!bookTitle) {
@@ -485,9 +638,10 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
 
         if (status === 'canceled') {
           canceledSalesMap.set(bookTitle, (canceledSalesMap.get(bookTitle) || 0) + 1);
+          continue;
         }
 
-        const isbn = normalizedData['sku'] || normalizedData['isbn'] || '';
+        const isbn = normalizedData['sku'] || normalizedData['isbn'] || normalizedData['código'] || '';
 
         let book;
         if (isbn) {
@@ -498,6 +652,20 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
           book = await Book.findOne({
             title: { $regex: new RegExp(bookTitle.toString(), 'i') }
           });
+
+          if (!book) {
+            const titleWords = bookTitle.split(' ').filter(word => word.length > 4);
+
+            if (titleWords.length > 0) {
+              const regexPatterns = titleWords.map(word =>
+                new RegExp(word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i')
+              );
+
+              book = await Book.findOne({
+                title: { $in: regexPatterns }
+              });
+            }
+          }
         }
 
         if (!book) {
@@ -556,8 +724,8 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
           salePrice,
           orderNumber,
           isProcessed: false,
-          source,
-          status
+          source: detectedSource,
+          status: 'completed'
         };
 
         if (customerId) {
@@ -603,7 +771,7 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
     );
 
     res.status(201).json({
-      message: `${results.length} vendas importadas com sucesso${errors.length > 0 || notFoundBooks.length > 0 || duplicateSales.length > 0 ? ' (com alguns problemas)' : ''}`,
+      message: `${results.length} vendas importadas com sucesso${errors.length > 0 || notFoundBooks.length > 0 || duplicateSales.length > 0 ? '' : ''}`,
       salesCreated: populatedSales,
       customersCreated: customersCreated.length,
       errors: errors.length > 0 ? errors : undefined,

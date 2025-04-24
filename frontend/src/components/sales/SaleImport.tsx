@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import Button from '@/components/commons/Button';
-import { importSales } from '@/services/saleService';
-import { toast } from 'react-toastify';
 import Alert from '@/components/commons/Alert';
-import BookForm from '@/components/books/BookForm';
+import { toast } from 'react-toastify';
 import Modal from '@/components/commons/Modal';
+import BookForm from '@/components/books/BookForm';
+import axios from 'axios';
 
 const SaleImport: React.FC<{
   onCancel: () => void;
@@ -15,6 +15,7 @@ const SaleImport: React.FC<{
   const [source, setSource] = useState<'parceira' | 'editora'>('editora');
   const [allowZeroPrices, setAllowZeroPrices] = useState<boolean>(false);
   const [importCustomers, setImportCustomers] = useState<boolean>(true);
+  const [autoDetectSource, setAutoDetectSource] = useState<boolean>(true);
   const [importResult, setImportResult] = useState<{
     success: boolean;
     message: string;
@@ -31,11 +32,16 @@ const SaleImport: React.FC<{
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
 
-      // Determinar automaticamente a origem das vendas baseado no nome do arquivo
+      // Lógica melhorada para detecção pelo nome do arquivo
       if (selectedFile.name.toLowerCase().includes('pedidosexport') ||
-        selectedFile.name.toLowerCase().includes('woocommerce')) {
+        selectedFile.name.toLowerCase().includes('woocommerce') ||
+        selectedFile.name.toLowerCase().includes('pedido') ||
+        selectedFile.name.toLowerCase().includes('site')) {
         setSource('editora');
-      } else if (selectedFile.name.toLowerCase().includes('vendas')) {
+      } else if (selectedFile.name.toLowerCase().includes('vendas') ||
+        selectedFile.name.toLowerCase().includes('parceiro') ||
+        selectedFile.name.toLowerCase().includes('amazon') ||
+        selectedFile.name.toLowerCase().includes('mercado')) {
         setSource('parceira');
       }
     }
@@ -43,13 +49,16 @@ const SaleImport: React.FC<{
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file) {
+      toast.error('Por favor, selecione um arquivo para importar.');
+      return;
+    }
 
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
     const validExtensions = ['csv', 'xlsx', 'xls'];
 
     if (!fileExtension || !validExtensions.includes(fileExtension)) {
-      toast.error('Formato de arquivo inválido. Por favor, envie um arquivo CSV ou Excel (XLSX/XLS).');
+      toast.error('Formato de arquivo inválido. Por favor, envie um arquivo Excel (XLSX/XLS).');
       return;
     }
 
@@ -59,11 +68,22 @@ const SaleImport: React.FC<{
     try {
       const formData = new FormData();
       formData.append('file', file);
+
       formData.append('source', source);
       formData.append('allowZeroPrices', allowZeroPrices ? 'true' : 'false');
       formData.append('importCustomers', importCustomers ? 'true' : 'false');
+      formData.append('autoDetectSource', autoDetectSource ? 'true' : 'false');
 
-      const result = await importSales(file, source, allowZeroPrices, importCustomers);
+      console.log('Enviando arquivo:', file.name, 'tamanho:', file.size);
+
+      const response = await axios.post('http://localhost:5000/api/sales/import', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const result = response.data;
+
       setImportResult({
         success: true,
         message: result.message,
@@ -78,12 +98,14 @@ const SaleImport: React.FC<{
         toast.success(result.message);
         onSuccess();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao importar vendas:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Erro ao importar vendas. Tente novamente.';
       setImportResult({
         success: false,
-        message: 'Erro ao importar vendas. Tente novamente.'
+        message: errorMessage
       });
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -127,7 +149,7 @@ const SaleImport: React.FC<{
 
   const detectFileType = (fileName: string) => {
     const name = fileName.toLowerCase();
-    if (name.includes('pedidosexport') || name.includes('woocommerce')) {
+    if (name.includes('pedidosexport') || name.includes('woocommerce') || name.includes('vendasSite')) {
       return 'WordPress (site da editora)';
     } else if (name.includes('vendas') || name.includes('parceiros')) {
       return 'Vendas de parceiros';
@@ -145,15 +167,12 @@ const SaleImport: React.FC<{
             className="mb-4"
           />
 
-          {importResult.customersCreated && importResult.customersCreated > 0 && (
-            <div className="mb-4 bg-green-50 p-3 rounded border border-green-200">
-              <h3 className="text-sm font-medium text-green-700 mb-1">
-                Clientes importados com sucesso!
-              </h3>
-              <p className="text-xs text-green-600">
-                {importResult.customersCreated} novos clientes foram criados a partir dos dados das vendas.
-              </p>
-            </div>
+          {importResult.customersCreated !== undefined && (
+            <p className="text-sm text-gray-600 mb-4">
+              {importResult.customersCreated > 0
+                ? `${importResult.customersCreated} cliente(s) criado(s) com sucesso.`
+                : 'Nenhum cliente foi criado.'}
+            </p>
           )}
 
           {importResult.notFoundBooks && importResult.notFoundBooks.length > 0 && (
@@ -215,7 +234,7 @@ const SaleImport: React.FC<{
           {importResult.canceledSales && importResult.canceledSales.length > 0 && (
             <div className="mb-4">
               <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Vendas canceladas importadas ({importResult.canceledSales.length}):
+                Vendas canceladas ({importResult.canceledSales.length}):
               </h3>
               <div className="bg-orange-50 p-3 rounded border border-orange-200 max-h-40 overflow-y-auto">
                 <ul className="list-disc pl-5 text-xs text-gray-600">
@@ -225,7 +244,7 @@ const SaleImport: React.FC<{
                 </ul>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Estas vendas foram importadas, mas marcadas como canceladas e não serão contabilizadas nos cálculos de comissão.
+                Estas vendas foram detectadas como canceladas e ignoradas na importação.
               </p>
             </div>
           )}
@@ -259,13 +278,13 @@ const SaleImport: React.FC<{
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
             <h3 className="text-sm font-medium text-gray-700 mb-2">Importar Planilha de Vendas</h3>
             <p className="text-xs text-gray-500">
-              Selecione uma planilha para importar vendas. O sistema suporta arquivos CSV ou Excel (XLSX/XLS).
+              Selecione uma planilha para importar vendas. O sistema suporta arquivos Excel (XLSX/XLS).
             </p>
           </div>
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Arquivo de Importação (CSV ou Excel)
+              Arquivo de Importação (Excel)
             </label>
             <input
               type="file"
@@ -288,7 +307,7 @@ const SaleImport: React.FC<{
             )}
 
             <p className="mt-2 text-xs text-gray-500">
-              Formatos suportados: CSV, Excel (XLSX, XLS)
+              Formatos suportados: Excel (XLSX, XLS)
             </p>
           </div>
 
@@ -307,6 +326,7 @@ const SaleImport: React.FC<{
                     checked={source === 'editora'}
                     onChange={() => setSource('editora')}
                     className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    disabled={autoDetectSource}
                   />
                   <label htmlFor="editora" className="ml-2 block text-sm text-gray-700 font-medium">
                     Vendas da Editora (WooCommerce/WordPress)
@@ -327,6 +347,7 @@ const SaleImport: React.FC<{
                     checked={source === 'parceira'}
                     onChange={() => setSource('parceira')}
                     className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    disabled={autoDetectSource}
                   />
                   <label htmlFor="parceira" className="ml-2 block text-sm text-gray-700 font-medium">
                     Parceiros (Amazon, Mercado Livre, etc.)
@@ -346,19 +367,34 @@ const SaleImport: React.FC<{
               <div className="flex items-center">
                 <input
                   type="checkbox"
+                  id="autoDetectSource"
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  checked={autoDetectSource}
+                  onChange={(e) => setAutoDetectSource(e.target.checked)}
+                />
+                <label htmlFor="autoDetectSource" className="ml-2 block text-sm text-gray-700">
+                  Detectar origem automaticamente
+                </label>
+              </div>
+              <p className="ml-6 text-xs text-gray-500">
+                O sistema tentará identificar se a planilha é do site da editora ou de parceiros baseado na estrutura do arquivo.
+              </p>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
                   id="importCustomers"
                   className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                   checked={importCustomers}
                   onChange={(e) => setImportCustomers(e.target.checked)}
                 />
                 <label htmlFor="importCustomers" className="ml-2 block text-sm text-gray-700">
-                  Importar dados de clientes (apenas para vendas da editora)
+                  Importar dados de clientes (quando disponíveis)
                 </label>
               </div>
               <p className="ml-6 text-xs text-gray-500">
                 Ao habilitar esta opção, o sistema criará ou atualizará registros de clientes com base nos dados dos compradores.
               </p>
-
 
               <p className="ml-6 text-xs text-gray-500">
                 Quando o preço não está presente na planilha, o sistema usará o preço cadastrado no banco de dados.
