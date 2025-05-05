@@ -31,6 +31,12 @@ const SalesPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const data = await getSales();
+      const statusCount = data.reduce<Record<string, number>>((acc, sale) => {
+        acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('Contagem por status:', statusCount);
+
       setAllSales(data);
       setFilteredSales(data);
       setLoading(false);
@@ -84,7 +90,7 @@ const SalesPage: React.FC = () => {
       const term = searchTerm.toLowerCase().trim();
       filtered = filtered.filter(sale =>
         (typeof sale.book === 'object' && sale.book.title.toLowerCase().includes(term)) ||
-        (typeof sale.book === 'object' && typeof sale.book.author === 'object' && sale.book.author.name?.toLowerCase().includes(term)) ||
+        (typeof sale.book === 'object' && Array.isArray(sale.book.author) && sale.book.author.some(author => typeof author === 'object' && 'name' in author && author.name?.toLowerCase().includes(term))) ||
         sale.platform.toLowerCase().includes(term)
       );
     }
@@ -107,15 +113,21 @@ const SalesPage: React.FC = () => {
       filtered = filtered.filter(sale => sale.source === sourceFilter);
     }
 
+    // Correção na lógica de filtros de status
     if (statusFilter !== 'all') {
-      if (statusFilter === 'processed') {
-        filtered = filtered.filter(sale => sale.commission);
-      } else if (statusFilter === 'pending') {
-        filtered = filtered.filter(sale => !sale.commission);
-      } else if (statusFilter === 'canceled') {
-        filtered = filtered.filter(sale => sale.status === 'canceled');
-      } else if (statusFilter === 'completed') {
-        filtered = filtered.filter(sale => sale.status === 'completed');
+      switch (statusFilter) {
+        case 'canceled':
+          filtered = filtered.filter(sale => sale.status === 'canceled');
+          break;
+        case 'completed':
+          filtered = filtered.filter(sale => sale.status === 'completed' && !sale.commission);
+          break;
+        case 'processed':
+          filtered = filtered.filter(sale => sale.commission);
+          break;
+        case 'pending':
+          filtered = filtered.filter(sale => !sale.commission && sale.status !== 'canceled');
+          break;
       }
     }
 
@@ -165,6 +177,7 @@ const SalesPage: React.FC = () => {
 
   const platforms = Array.from(new Set(allSales.map(sale => sale.platform)));
 
+  // Calcular totais excluindo vendas canceladas
   const totalAmount = filteredSales.reduce((sum, sale) => {
     if (sale.status !== 'canceled') {
       return sum + (sale.salePrice * sale.quantity);
@@ -179,6 +192,13 @@ const SalesPage: React.FC = () => {
     return sum;
   }, 0);
 
+  // Contar estatísticas por status (para mostrar no dashboard)
+  const statusStats = {
+    total: filteredSales.length,
+    canceled: filteredSales.filter(sale => sale.status === 'canceled').length,
+    active: filteredSales.filter(sale => sale.status !== 'canceled').length
+  };
+
   const columns = [
     {
       header: 'Livro',
@@ -191,9 +211,11 @@ const SalesPage: React.FC = () => {
             </svg>
           </div>
           <div>
-            <div className="font-medium text-gray-900">{typeof sale.book === 'object' ? sale.book.title : 'Livro não disponível'}</div>
+            <div className={`font-medium ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
+              {typeof sale.book === 'object' ? sale.book.title : 'Livro não disponível'}
+            </div>
             <div className="text-xs text-gray-500">
-              {typeof sale.book === 'object' && typeof sale.book.author === 'object' ? `Organizador: ${sale.book.author.name}` : ''}
+              {typeof sale.book === 'object' && Array.isArray(sale.book.author) ? `Organizador: ${sale.book.author.map(author => typeof author === 'object' && 'name' in author ? author.name : author).join(', ')}` : ''}
             </div>
           </div>
         </div>
@@ -203,7 +225,10 @@ const SalesPage: React.FC = () => {
       header: 'Plataforma',
       accessor: 'platform',
       render: (sale: ISale) => (
-        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+          ${sale.status === 'canceled'
+            ? 'bg-red-50 text-red-700'
+            : 'bg-blue-100 text-blue-800'}`}>
           {sale.platform}
         </span>
       )
@@ -212,9 +237,12 @@ const SalesPage: React.FC = () => {
       header: 'Origem',
       accessor: 'source',
       render: (sale: ISale) => (
-        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.source === 'editora'
-          ? 'bg-green-100 text-green-800'
-          : 'bg-gray-100 text-gray-800'
+        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+          ${sale.status === 'canceled'
+            ? 'bg-red-50 text-red-700'
+            : sale.source === 'editora'
+              ? 'bg-green-100 text-green-800'
+              : 'bg-gray-100 text-gray-800'
           }`}>
           {sale.source === 'editora' ? 'Editora' : 'Parceira'}
         </span>
@@ -224,7 +252,7 @@ const SalesPage: React.FC = () => {
       header: 'Data',
       accessor: 'saleDate',
       render: (sale: ISale) => (
-        <div className="text-sm text-gray-900">
+        <div className={`text-sm ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
           {new Date(sale.saleDate).toLocaleDateString('pt-BR')}
         </div>
       )
@@ -233,7 +261,7 @@ const SalesPage: React.FC = () => {
       header: 'Quantidade',
       accessor: 'quantity',
       render: (sale: ISale) => (
-        <div className="text-sm text-gray-900 font-medium">
+        <div className={`text-sm font-medium ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
           {sale.quantity} un
         </div>
       )
@@ -242,7 +270,7 @@ const SalesPage: React.FC = () => {
       header: 'Valor Unitário',
       accessor: 'salePrice',
       render: (sale: ISale) => (
-        <div className="text-sm text-gray-900">
+        <div className={`text-sm ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
           {formatCurrency(sale.salePrice)}
         </div>
       )
@@ -252,7 +280,7 @@ const SalesPage: React.FC = () => {
       accessor: 'total',
       render: (sale: ISale) => (
         <div className={`text-sm font-medium ${sale.status === 'canceled'
-          ? 'text-gray-400 line-through'
+          ? 'text-red-700 line-through'
           : 'text-gray-900'
           }`}>
           {formatCurrency(sale.salePrice * sale.quantity)}
@@ -260,25 +288,28 @@ const SalesPage: React.FC = () => {
       )
     },
     {
-      header: 'Comissão',
+      header: 'Status',
       accessor: 'status',
       render: (sale: ISale) => {
-        let statusClass = 'bg-yellow-100 text-yellow-800';
-        let statusText = 'Pendente';
-
-        if (sale.commission) {
-          statusClass = 'bg-green-100 text-green-800';
-          statusText = 'Processada';
+        if (sale.status === 'canceled') {
+          return (
+            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+              Cancelada
+            </span>
+          );
         }
 
-        if (sale.status === 'canceled') {
-          statusClass = 'bg-red-100 text-red-800';
-          statusText = 'Cancelada';
+        if (sale.commission) {
+          return (
+            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+              Processada
+            </span>
+          );
         }
 
         return (
-          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}`}>
-            {statusText}
+          <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+            Pendente
           </span>
         );
       }
@@ -333,11 +364,11 @@ const SalesPage: React.FC = () => {
   ];
 
   const getRowClass = (sale: ISale) => {
-    if (sale.source === 'editora') {
-      return 'bg-green-50 hover:bg-green-100';
-    }
     if (sale.status === 'canceled') {
       return 'bg-red-50 hover:bg-red-100';
+    }
+    if (sale.source === 'editora') {
+      return 'bg-green-50 hover:bg-green-100';
     }
     return '';
   };
@@ -392,7 +423,10 @@ const SalesPage: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Total de Registros</p>
-              <p className="text-xl font-bold text-gray-900">{filteredSales.length}</p>
+              <p className="text-xl font-bold text-gray-900">
+                {statusStats.total} vendas <span></span>
+                <span className="text-sm text-red-500 font-normal">({statusStats.canceled} canceladas)</span>
+              </p>
             </div>
           </div>
         </div>
@@ -495,7 +529,6 @@ const SalesPage: React.FC = () => {
               <option value="pending">Pendentes</option>
               <option value="processed">Processados</option>
               <option value="canceled">Cancelados</option>
-              <option value="completed">Completos</option>
             </select>
           </div>
         </div>
@@ -518,7 +551,7 @@ const SalesPage: React.FC = () => {
               columns={columns}
               data={filteredSales}
               keyExtractor={(sale) => sale._id}
-              onRowClick={(sale) => !sale.commission && handleOpenFormModal(sale)}
+              onRowClick={(sale) => !sale.commission && sale.status !== 'canceled' && handleOpenFormModal(sale)}
               rowClassName={getRowClass}
             />
           )}

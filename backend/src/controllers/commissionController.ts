@@ -9,7 +9,7 @@ import { ICommissionCalculationDTO } from '../types';
 export const getCommissions = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const commissions = await Commission.find({})
     .populate('author', 'name email commissionRate')
-    .sort({ startDate: -1 });
+    .sort({ 'author.name': 1 });
 
   res.json(commissions);
 });

@@ -395,30 +395,36 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
 
       data = results;
     }
+
     const detectSourceFromData = (data: any[]): string => {
       if (!data || data.length === 0) return 'editora';
       const firstRow = data[0];
       const keys = Object.keys(firstRow).map(k => k.toLowerCase().trim());
 
       const editoraIndicators = [
-        'pedido id',
-        'pedido key',
-        'Data do Pedido',
-        'billing first name',
-        'billing last name',
-        'email para faturamento',
-        'email da conta do cliente',
-        'billing phone',
-        'shipping',
-        'mercado pago'
+        'data do pedido',
+        'número do pedido',
+        'status do pedido',
+        'nome do item',
+        'quantidade',
+        'custo do item',
+        'valor total do pedido',
+        'primeiro nome (cobrança)',
+        'sobrenome (cobrança)',
+        'e-mail (cobrança)',
+        'telefone (cobrança)'
       ];
 
       const parceiraIndicators = [
         'canal',
-        'plataforma',
-        'marketplace',
-        'valor unitário',
-        'id do pedido'
+        'pedido',
+        'pedido canal',
+        'título',
+        'sku',
+        'quantidade',
+        'valor total capa',
+        'data venda',
+        'status do item'
       ];
 
       let editoraCount = 0;
@@ -440,9 +446,7 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
       if (parceiraCount > editoraCount) {
         return 'parceira';
       }
-      if (keys.includes('pedido id') || keys.includes('billing first name')) {
-        return 'editora';
-      }
+
       return 'editora';
     }
 
@@ -468,65 +472,22 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
         let customerPhone = '';
 
         if (detectedSource === 'editora') {
-          orderNumber = normalizedData['pedido id'] || normalizedData['pedido key'] || normalizedData['order number'] || '';
+          orderNumber = normalizedData['número do pedido'] || '';
+          saleDateStr = normalizedData['data do pedido'] || '';
 
-          saleDateStr = (row as Record<string, any>)['Data do Pedido'] ||
-            normalizedData['data do pedido'] ||
-            normalizedData['Data do Pedido'] ||
-            normalizedData['order date'] || '';
+          const statusValue = normalizedData['status do pedido'] || '';
+          status = /(cancelado|devolvido)/i.test(statusValue) ? 'canceled' : 'completed';
 
-          if (saleDateStr instanceof Date) {
-            const year = saleDateStr.getFullYear();
-            const month = String(saleDateStr.getMonth() + 1).padStart(2, '0');
-            const day = String(saleDateStr.getDate()).padStart(2, '0');
-            saleDateStr = `${year}-${month}-${day}`;
-          }
+          bookTitle = normalizedData['nome do item'] || '';
+          quantity = parseInt(normalizedData['quantidade'] || '1', 10);
+          salePrice = normalizePrice(normalizedData['custo do item'] || 0);
 
-          status = (normalizedData['Status do Pedido'] || '').toLowerCase() === 'cancelado' ? 'canceled' : 'completed';
-
-          const firstName = normalizedData['billing first name'] || '';
-          const lastName = normalizedData['billing last name'] || '';
+          const firstName = normalizedData['primeiro nome (cobrança)'] || '';
+          const lastName = normalizedData['sobrenome (cobrança)'] || '';
           customerName = `${firstName} ${lastName}`.trim();
-          customerEmail = normalizedData['email para faturamento'] || normalizedData['email da conta do cliente'] || '';
-          customerPhone = normalizedData['billing phone'] || '';
 
-          let foundLineItem = false;
-
-          for (const key in normalizedData) {
-            if ((key.includes('item') || key.includes('produto') || key.includes('line_item')) &&
-              typeof normalizedData[key] === 'string') {
-              const lineItemValue = normalizedData[key];
-
-              const match1 = lineItemValue.match(/(.*) × (\d+) \((R\$[\d,.]+)\)/);
-              if (match1) {
-                bookTitle = match1[1].trim();
-                quantity = parseInt(match1[2], 10);
-                salePrice = normalizePrice(match1[3]);
-                foundLineItem = true;
-                break;
-              }
-
-              const match2 = lineItemValue.match(/(\d+) x (.*)/i);
-              if (match2) {
-                quantity = parseInt(match2[1], 10);
-                bookTitle = match2[2].trim();
-                foundLineItem = true;
-              }
-            }
-          }
-
-          if (foundLineItem && (isNaN(salePrice) || salePrice <= 0)) {
-            salePrice = normalizePrice(normalizedData['total do pedido'] || 0);
-            if (salePrice > 0 && quantity > 1) {
-              salePrice = salePrice / quantity;
-            }
-          }
-
-          if (!foundLineItem) {
-            bookTitle = normalizedData['título'] || normalizedData['title'] || '';
-            quantity = parseInt(normalizedData['quantidade'] || '1', 10);
-            salePrice = normalizePrice(normalizedData['total do pedido'] || normalizedData['order total'] || '0');
-          }
+          customerEmail = normalizedData['e-mail (cobrança)'] || '';
+          customerPhone = normalizedData['telefone (cobrança)'] || '';
 
           platform = 'Site da Editora';
         } else {
@@ -555,11 +516,11 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
             normalizedData['preço de venda'] ||
             normalizedData['valor unitário cliente'] ||
             normalizedData['preço final'] ||
-            normalizedData['valor total'] || 0
+            normalizedData['valor total capa'] || 0
           );
 
-          if (salePrice > 0 && quantity > 1 && normalizedData['valor total']) {
-            const totalValue = normalizePrice(normalizedData['valor total']);
+          if (salePrice > 0 && quantity > 1 && normalizedData['valor total capa']) {
+            const totalValue = normalizePrice(normalizedData['valor total capa']);
             if (totalValue > 0) {
               salePrice = totalValue / quantity;
             }
@@ -578,6 +539,7 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
             normalizedData['número do pedido'] ||
             normalizedData['nro pedido'] ||
             normalizedData['código'] ||
+            normalizedData['pedido canal'] ||
             '';
 
           saleDateStr =
@@ -590,9 +552,10 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
           const statusValue =
             normalizedData['status'] ||
             normalizedData['situação'] ||
+            normalizedData['status do item'] ||
             '';
 
-          status = /(cancelado|cancelled|canceled|devolvido|returned)/i.test(statusValue) ? 'canceled' : 'completed';
+          status = /(cancelado|cancelled|canceled|devolvido|returned|item cancelado)/i.test(statusValue) ? 'canceled' : 'completed';
 
           customerName =
             normalizedData['cliente'] ||
@@ -638,7 +601,6 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
 
         if (status === 'canceled') {
           canceledSalesMap.set(bookTitle, (canceledSalesMap.get(bookTitle) || 0) + 1);
-          continue;
         }
 
         const isbn = normalizedData['sku'] || normalizedData['isbn'] || normalizedData['código'] || '';
@@ -725,7 +687,7 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
           orderNumber,
           isProcessed: false,
           source: detectedSource,
-          status: 'completed'
+          status: status
         };
 
         if (customerId) {
