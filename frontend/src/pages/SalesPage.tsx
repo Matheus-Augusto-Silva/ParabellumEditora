@@ -474,7 +474,7 @@ const SalesPage: React.FC = () => {
                 type="text"
                 id="search"
                 className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
-                placeholder="Buscar por livro, organizador..."
+                placeholder="Buscar por livro..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />

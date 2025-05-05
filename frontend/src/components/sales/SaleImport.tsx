@@ -302,7 +302,6 @@ const SaleImport: React.FC<{
             {file && (
               <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
                 <p>Arquivo detectado: <strong>{file.name}</strong></p>
-                <p>Tipo: <strong>{detectFileType(file.name)}</strong></p>
               </div>
             )}
 

@@ -21,7 +21,7 @@ const CommissionForm: React.FC<CommissionFormProps> = ({ onSuccess, onCancel }) 
   const [authors, setAuthors] = useState<IAuthor[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ message: string; salesCount: number; amount: number } | null>(null);
+  const [success, setSuccess] = useState<{ message: string } | null>(null);
   const [fetchingAuthors, setFetchingAuthors] = useState<boolean>(true);
 
   useEffect(() => {
@@ -92,8 +92,7 @@ const CommissionForm: React.FC<CommissionFormProps> = ({ onSuccess, onCancel }) 
 
       setSuccess({
         message: 'Comissão calculada com sucesso!',
-        salesCount: result.salesCount,
-        amount: result.authorCommission
+
       });
 
       setLoading(false);
@@ -130,10 +129,6 @@ const CommissionForm: React.FC<CommissionFormProps> = ({ onSuccess, onCancel }) 
           message={success.message}
           className="mb-4"
         >
-          <div className="mt-2">
-            <p><strong>Vendas processadas:</strong> {success.salesCount}</p>
-            <p><strong>Valor da comissão:</strong> {formatCurrency(success.amount)}</p>
-          </div>
         </Alert>
       )}
 

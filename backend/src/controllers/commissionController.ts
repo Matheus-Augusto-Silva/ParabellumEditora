@@ -94,7 +94,8 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
   const sales = await Sale.find({
     author: authorId,
     saleDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
-    isProcessed: false
+    isProcessed: false,
+    status: { $ne: 'canceled' }
   }).populate({
     path: 'book',
     select: 'title price',
@@ -119,7 +120,6 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
     totalSalesAmount += saleTotal;
 
     authorCommissionAmount += saleTotal * authorRate;
-
   }
 
   authorCommissionAmount = Number(authorCommissionAmount.toFixed(2));
