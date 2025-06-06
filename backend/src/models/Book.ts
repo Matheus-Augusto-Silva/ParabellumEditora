@@ -8,11 +8,11 @@ const bookSchema: Schema = new mongoose.Schema(
       required: [true, 'O título do livro é obrigatório'],
       trim: true
     },
-    author: {
+    author: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Author',
-      required: [true, 'O autor do livro é obrigatório']
-    },
+      required: true
+    }],
     isbn: {
       type: String,
       trim: true,
@@ -52,6 +52,6 @@ bookSchema.set('toJSON', {
   }
 });
 
-const Book = mongoose.model < IBook > ('Book', bookSchema);
+const Book = mongoose.model<IBook>('Book', bookSchema);
 
 export default Book;

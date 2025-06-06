@@ -85,20 +85,38 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
   }
 
   const author = await Author.findById(authorId);
-
   if (!author) {
     res.status(404);
     throw new Error('Autor não encontrado');
   }
 
-  const sales = await Sale.find({
+  const authorBooks = await Book.find({ author: { $in: [authorId] } }).populate('author', 'name');
+
+  if (authorBooks.length === 0) {
+    res.status(404);
+    throw new Error('Nenhum livro encontrado para este autor');
+  }
+
+  const bookIds = authorBooks.map(book => book._id);
+
+  const existingCommissions = await Commission.find({
     author: authorId,
+    startDate: { $gte: new Date(startDate) },
+    endDate: { $lte: new Date(endDate) }
+  });
+
+  const processedSaleIds = existingCommissions.reduce((acc: any[], comm) => {
+    return acc.concat(comm.sales || []);
+  }, []);
+
+  const sales = await Sale.find({
+    book: { $in: bookIds },
     saleDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
-    isProcessed: false,
-    status: { $ne: 'canceled' }
+    status: { $ne: 'canceled' },
+    _id: { $nin: processedSaleIds }
   }).populate({
     path: 'book',
-    select: 'title price',
+    select: 'title price author',
     populate: {
       path: 'author',
       select: 'name'
@@ -107,23 +125,82 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
 
   if (sales.length === 0) {
     res.status(404);
-    throw new Error('Não há vendas pendentes de cálculo de comissão para o período selecionado');
+    throw new Error('Nenhuma venda encontrada para o período selecionado ou todas as vendas já foram processadas para este autor');
   }
 
   let totalSalesAmount = 0;
+  let totalQuantity = 0;
   let authorCommissionAmount = 0;
+  const baseCommissionRate = author.commissionRate / 100;
 
-  const authorRate = author.commissionRate / 100;
+  let hasDividedCommissions = false;
+  let dividedCommissionDetails: any[] = [];
+  let integralCommissionDetails: any[] = [];
+
+  let editoraSales = 0;
+  let parceiraSales = 0;
+  let editoraTotal = 0;
+  let parceiraTotal = 0;
 
   for (const sale of sales) {
     const saleTotal = sale.salePrice * sale.quantity;
-    totalSalesAmount += saleTotal;
+    const book = sale.book as any;
 
-    authorCommissionAmount += saleTotal * authorRate;
+    let numberOfAuthors = 1;
+    let bookAuthors = [];
+
+    if (book.author) {
+      if (Array.isArray(book.author)) {
+        numberOfAuthors = book.author.length;
+        bookAuthors = book.author;
+      } else {
+        numberOfAuthors = 1;
+        bookAuthors = [book.author];
+      }
+    }
+
+    const authorShareRate = baseCommissionRate / numberOfAuthors;
+    const authorCommissionForThisSale = saleTotal * authorShareRate;
+
+    totalSalesAmount += saleTotal;
+    totalQuantity += sale.quantity;
+    authorCommissionAmount += authorCommissionForThisSale;
+
+    if (numberOfAuthors > 1) {
+      hasDividedCommissions = true;
+
+      const coAuthors = bookAuthors
+        .filter((a: any) => a._id && a._id.toString() !== authorId)
+        .map((a: any) => a.name);
+
+      dividedCommissionDetails.push({
+        bookTitle: book.title,
+        numberOfAuthors,
+        coAuthors,
+        saleTotal,
+        originalRate: baseCommissionRate * 100,
+        dividedRate: (authorShareRate * 100).toFixed(2),
+        commission: authorCommissionForThisSale.toFixed(2)
+      });
+    } else {
+      integralCommissionDetails.push({
+        bookTitle: book.title,
+        saleTotal,
+        rate: baseCommissionRate * 100,
+        commission: authorCommissionForThisSale.toFixed(2)
+      });
+    }
+
+    if (sale.source === 'parceira') {
+      parceiraSales++;
+      parceiraTotal += saleTotal;
+    } else {
+      editoraSales++;
+      editoraTotal += saleTotal;
+    }
   }
 
   authorCommissionAmount = Number(authorCommissionAmount.toFixed(2));
-  totalSalesAmount = Number(totalSalesAmount.toFixed(2));
 
   const commission = await Commission.create({
     author: authorId,
@@ -131,21 +208,55 @@ export const calculateCommission = asyncHandler(async (req: Request, res: Respon
     endDate,
     commissionRate: author.commissionRate,
     commissionAmount: authorCommissionAmount,
-    totalSales: totalSalesAmount,
+    totalSales: Number(totalSalesAmount.toFixed(2)),
     isPaid: false,
-    sales: sales.map(sale => sale._id)
+    sales: sales.map(sale => sale._id),
+    hasDividedCommissions,
+    dividedCommissionDetails: hasDividedCommissions ? dividedCommissionDetails : undefined,
+    integralCommissionDetails: integralCommissionDetails.length > 0 ? integralCommissionDetails : undefined
   });
 
   for (const sale of sales) {
-    sale.isProcessed = true;
-    sale.commission = commission._id;
+    if (!sale.commission.includes(commission._id)) {
+      sale.commission.push(commission._id);
+    }
+
+    if (!sale.isProcessed) {
+      sale.isProcessed = true;
+    }
+
     await sale.save();
   }
 
   res.status(201).json({
     message: 'Comissão calculada com sucesso',
-    commission,
-    salesCount: sales.length
+    salesCount: sales.length,
+    commission: {
+      _id: commission._id,
+      commissionAmount: commission.commissionAmount,
+      totalSales: commission.totalSales,
+      commissionRate: commission.commissionRate,
+      hasDividedCommissions,
+      dividedCommissionDetails,
+      integralCommissionDetails
+    },
+    authorId,
+    startDate,
+    endDate,
+    totalSales: totalSalesAmount,
+    totalQuantity,
+    authorCommission: authorCommissionAmount,
+    detail: {
+      parceira: {
+        sales: parceiraSales,
+        total: parceiraTotal
+      },
+      editora: {
+        sales: editoraSales,
+        total: editoraTotal
+      }
+    },
+    salesIds: sales.map(sale => sale._id.toString())
   });
 });
 
@@ -175,11 +286,44 @@ export const markCommissionAsPaid = asyncHandler(async (req: Request, res: Respo
 
   const updatedCommission = await commission.save();
 
+  await updateSalesPaymentStatus(commission.sales);
+
   res.json({
     message: 'Comissão marcada como paga com sucesso',
     commission: updatedCommission
   });
 });
+
+const updateSalesPaymentStatus = async (saleIds: any[]) => {
+  for (const saleId of saleIds) {
+    const sale = await Sale.findById(saleId).populate({
+      path: 'book',
+      populate: {
+        path: 'author',
+        select: '_id name'
+      }
+    }).populate('commission');
+
+    if (!sale) continue;
+
+    const book = sale.book as any;
+    const totalAuthors = book.author ? book.author.length : 1;
+
+    const paidCommissions = await Commission.countDocuments({
+      _id: { $in: sale.commission },
+      isPaid: true
+    });
+
+    let newStatus = 'pending';
+    if (paidCommissions === totalAuthors) {
+      newStatus = 'completed';
+    } else if (paidCommissions > 0) {
+      newStatus = 'partial';
+    }
+    sale.paymentStatus = newStatus;
+    await sale.save();
+  }
+};
 
 export const deleteCommission = async (req: Request, res: Response): Promise<void> => {
   try {

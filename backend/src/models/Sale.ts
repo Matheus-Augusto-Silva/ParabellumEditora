@@ -8,10 +8,10 @@ const saleSchema: Schema = new mongoose.Schema(
       ref: 'Book',
       required: [true, 'O livro é obrigatório']
     },
-    author: {
+    author: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Author'
-    },
+    }],
     platform: {
       type: String,
       required: [true, 'A plataforma é obrigatória'],
@@ -46,9 +46,14 @@ const saleSchema: Schema = new mongoose.Schema(
       required: [true, 'O preço de venda é obrigatório'],
       min: 0
     },
-    commission: {
+    commission: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Commission'
+    }],
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'partial', 'completed'],
+      default: 'pending'
     },
     isProcessed: {
       type: Boolean,
@@ -93,12 +98,19 @@ saleSchema.pre('save', async function (next) {
 
   if (this.book) {
     try {
-      const book = await mongoose.model('Book').findById(this.book).populate('author');
-      if (book && book.author) {
-        this.author = book.author._id;
+      const book = await mongoose.model('Book').findById(this.book);
+
+      if (book && book.author && book.author.length > 0) {
+        this.author = book.author[0];
+        console.log('✅ Author definido no middleware:', this.author);
+      } else {
+        console.log('❌ Livro não encontrado ou sem autor:', {
+          bookFound: !!book,
+          hasAuthor: book?.author?.length > 0
+        });
       }
     } catch (error) {
-      console.error('Erro ao buscar autor do livro:', error);
+      console.error('❌ Erro no middleware Sale:', error);
     }
   }
 

@@ -40,34 +40,66 @@ export interface IBook {
 
 export interface ISale {
   _id: string;
-  book: IBook | string;
+  book: {
+    _id: string;
+    title: string;
+    author: IAuthor[] | IAuthor;
+    price: number;
+  };
+  author: IAuthor[];
   platform: string;
   saleDate: string;
   quantity: number;
   salePrice: number;
-  source?: string;
-  commission?: string;
-  status?: 'completed' | 'canceled';
-  customer?: ICustomer | string;
-  createdAt?: string;
-  updatedAt?: string;
+  commission?: string | {
+    _id: string;
+    isPaid: boolean;
+    paymentDate?: string;
+    commissionAmount: number;
+  };
+  isProcessed: boolean;
+  paymentStatus: 'pending' | 'partial' | 'completed';
+  orderNumber?: string;
+  customer?: ICustomer;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  source: 'editora' | 'parceira';
+  status: 'completed' | 'canceled';
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ICommissionDetail {
+  bookTitle: string;
+  numberOfAuthors?: number;
+  coAuthors?: string[];
+  saleTotal: number;
+  originalRate?: number;
+  dividedRate?: string;
+  rate?: number;
+  commission: string;
 }
 
 export interface ICommission {
   _id: string;
-  author: IAuthor | string;
+  author: {
+    _id: string;
+    name: string;
+    email: string;
+    commissionRate: number;
+  };
   startDate: string;
   endDate: string;
-  commissionAmount: number;
   commissionRate: number;
+  commissionAmount: number;
   totalSales: number;
   isPaid: boolean;
   paymentDate?: string;
-  paymentMethod?: string;
-  notes?: string;
-  sales?: string[] | ISale[];
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string;
+  hasDividedCommissions?: boolean;
+  dividedCommissionDetails?: ICommissionDetail[];
+  integralCommissionDetails?: ICommissionDetail[];
 }
 
 export interface IAuthorStats {

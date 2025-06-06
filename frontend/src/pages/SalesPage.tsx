@@ -8,7 +8,7 @@ import Alert from '@/components/commons/Alert';
 import SaleForm from '@/components/sales/SaleForm';
 import SaleImport from '@/components/sales/SaleImport';
 import { formatCurrency } from '@/utils/formatters';
-import { deleteSale, getSales, updateSale } from '@/services/saleService';
+import { deleteSale, getSales } from '@/services/saleService';
 import { ISale } from '@/types';
 
 const SalesPage: React.FC = () => {
@@ -26,17 +26,25 @@ const SalesPage: React.FC = () => {
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
+
+  const canEditSale = (sale: ISale): boolean => {
+    if (sale.status === 'canceled') return false;
+
+    if (!sale.commission) return true;
+
+    if (typeof sale.commission === 'object') {
+      return !sale.commission.isPaid;
+    }
+
+    return true;
+  };
+
   const fetchSales = async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await getSales();
-      const statusCount = data.reduce<Record<string, number>>((acc, sale) => {
-        acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
-        return acc;
-      }, {});
-      console.log('Contagem por status:', statusCount);
-
       setAllSales(data);
       setFilteredSales(data);
       setLoading(false);
@@ -53,7 +61,8 @@ const SalesPage: React.FC = () => {
 
   useEffect(() => {
     filterSales();
-  }, [searchTerm, dateFilter, platformFilter, sourceFilter, statusFilter, allSales]);
+
+  }, [searchTerm, dateFilter, platformFilter, sourceFilter, statusFilter, paymentStatusFilter, allSales]);
 
   const handleDeleteSale = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta venda? Esta ação não pode ser desfeita.')) {
@@ -89,9 +98,14 @@ const SalesPage: React.FC = () => {
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase().trim();
       filtered = filtered.filter(sale =>
-        (typeof sale.book === 'object' && sale.book.title.toLowerCase().includes(term)) ||
-        (typeof sale.book === 'object' && Array.isArray(sale.book.author) && sale.book.author.some(author => typeof author === 'object' && 'name' in author && author.name?.toLowerCase().includes(term))) ||
-        sale.platform.toLowerCase().includes(term)
+        sale.book?.title?.toLowerCase().includes(term) ||
+        (Array.isArray(sale.book?.author)
+          ? sale.book.author.some(author => author.name?.toLowerCase().includes(term))
+          : sale.book?.author?.name?.toLowerCase().includes(term)
+        ) ||
+        sale.platform?.toLowerCase().includes(term) ||
+        sale.customerName?.toLowerCase().includes(term) ||
+        sale.orderNumber?.toLowerCase().includes(term)
       );
     }
 
@@ -113,25 +127,84 @@ const SalesPage: React.FC = () => {
       filtered = filtered.filter(sale => sale.source === sourceFilter);
     }
 
-    // Correção na lógica de filtros de status
     if (statusFilter !== 'all') {
       switch (statusFilter) {
         case 'canceled':
           filtered = filtered.filter(sale => sale.status === 'canceled');
           break;
-        case 'completed':
-          filtered = filtered.filter(sale => sale.status === 'completed' && !sale.commission);
-          break;
-        case 'processed':
-          filtered = filtered.filter(sale => sale.commission);
-          break;
         case 'pending':
           filtered = filtered.filter(sale => !sale.commission && sale.status !== 'canceled');
+          break;
+        case 'processed':
+          filtered = filtered.filter(sale =>
+            sale.commission &&
+            (typeof sale.commission !== 'object' || !sale.commission.isPaid)
+          );
+          break;
+        case 'paid':
+          filtered = filtered.filter(sale =>
+            sale.commission &&
+            typeof sale.commission === 'object' &&
+            sale.commission.isPaid
+          );
           break;
       }
     }
 
+    if (paymentStatusFilter !== 'all') {
+      filtered = filtered.filter(sale => sale.paymentStatus === paymentStatusFilter);
+    }
+
     setFilteredSales(filtered);
+  };
+
+  const renderPaymentStatus = (sale: ISale) => {
+    const statusConfig = {
+      pending: {
+        label: 'Pendente',
+        className: 'bg-yellow-100 text-yellow-800',
+        icon: '⏳'
+      },
+      partial: {
+        label: 'Parcial',
+        className: 'bg-blue-100 text-blue-800',
+        icon: '🔄'
+      },
+      completed: {
+        label: 'Pago',
+        className: 'bg-green-100 text-green-800',
+        icon: '✅'
+      }
+    };
+
+    const config = statusConfig[sale.paymentStatus || 'pending'];
+
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.className}`}>
+        <span className="mr-1">{config.icon}</span>
+        {config.label}
+      </span>
+    );
+  };
+
+  const renderAuthorInfo = (sale: ISale) => {
+    if (!sale.book.author) return 'Autor não disponível';
+
+    if (Array.isArray(sale.book.author)) {
+      if (sale.book.author.length === 1) {
+        return sale.book.author[0].name;
+      }
+      return (
+        <div>
+          <div className="font-medium">{sale.book.author.length} autores</div>
+          <div className="text-xs text-gray-500 truncate" title={sale.book.author.map(a => a.name).join(', ')}>
+            {sale.book.author.map(a => a.name).join(', ')}
+          </div>
+        </div>
+      );
+    }
+
+    return typeof sale.book.author === 'object' ? sale.book.author.name : 'Autor não disponível';
   };
 
   const handleOpenFormModal = (sale: ISale | null = null) => {
@@ -175,9 +248,7 @@ const SalesPage: React.FC = () => {
     }, 5000);
   };
 
-  const platforms = Array.from(new Set(allSales.map(sale => sale.platform)));
 
-  // Calcular totais excluindo vendas canceladas
   const totalAmount = filteredSales.reduce((sum, sale) => {
     if (sale.status !== 'canceled') {
       return sum + (sale.salePrice * sale.quantity);
@@ -192,34 +263,51 @@ const SalesPage: React.FC = () => {
     return sum;
   }, 0);
 
-  // Contar estatísticas por status (para mostrar no dashboard)
   const statusStats = {
     total: filteredSales.length,
     canceled: filteredSales.filter(sale => sale.status === 'canceled').length,
-    active: filteredSales.filter(sale => sale.status !== 'canceled').length
+
+    active: filteredSales.filter(sale => sale.status !== 'canceled').length,
+    pending: filteredSales.filter(sale => sale.paymentStatus === 'pending').length,
+    partial: filteredSales.filter(sale => sale.paymentStatus === 'partial').length,
+    completed: filteredSales.filter(sale => sale.paymentStatus === 'completed').length,
   };
 
   const columns = [
     {
       header: 'Livro',
       accessor: 'book',
-      render: (sale: ISale) => (
-        <div className="flex items-center">
-          <div className="flex-shrink-0 h-10 w-10 mr-3 bg-indigo-100 rounded-md flex items-center justify-center text-indigo-700">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-          </div>
-          <div>
-            <div className={`font-medium ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
-              {typeof sale.book === 'object' ? sale.book.title : 'Livro não disponível'}
+      render: (sale: ISale) => {
+        const bookTitle = typeof sale.book === 'object' ? sale.book.title : 'Livro não disponível';
+
+        return (
+          <div className="flex items-center">
+            <div className="flex-shrink-0 h-10 w-10 mr-3 bg-indigo-100 rounded-md flex items-center justify-center text-indigo-700">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
             </div>
-            <div className="text-xs text-gray-500">
-              {typeof sale.book === 'object' && Array.isArray(sale.book.author) ? `Organizador: ${sale.book.author.map(author => typeof author === 'object' && 'name' in author ? author.name : author).join(', ')}` : ''}
+            <div className="min-w-0 flex-1">
+              <div className={`font-medium truncate ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`} title={bookTitle}>
+                {bookTitle}
+              </div>
             </div>
           </div>
-        </div>
-      )
+        );
+      }
+    },
+    {
+      header: 'Autor(es)',
+      accessor: 'author',
+      render: (sale: ISale) => {
+        const authorName = typeof sale.book.author === 'object' ? sale.book.author.name : 'Author não disponível';
+        return (
+          <div className={`text-sm ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
+            {authorName}
+          </div>
+        );
+      }
     },
     {
       header: 'Plataforma',
@@ -258,16 +346,16 @@ const SalesPage: React.FC = () => {
       )
     },
     {
-      header: 'Quantidade',
+      header: 'Qtd',
       accessor: 'quantity',
       render: (sale: ISale) => (
         <div className={`text-sm font-medium ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
-          {sale.quantity} un
+          {sale.quantity}
         </div>
       )
     },
     {
-      header: 'Valor Unitário',
+      header: 'Valor Unit.',
       accessor: 'salePrice',
       render: (sale: ISale) => (
         <div className={`text-sm ${sale.status === 'canceled' ? 'text-red-700' : 'text-gray-900'}`}>
@@ -288,8 +376,10 @@ const SalesPage: React.FC = () => {
       )
     },
     {
-      header: 'Status',
-      accessor: 'status',
+
+
+      header: 'Status Pagamento',
+      accessor: 'paymentStatus',
       render: (sale: ISale) => {
         if (sale.status === 'canceled') {
           return (
@@ -299,17 +389,69 @@ const SalesPage: React.FC = () => {
           );
         }
 
-        if (sale.commission) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        return renderPaymentStatus(sale);
+      }
+    },
+    {
+      header: 'Status Comissão',
+      accessor: 'commissionStatus',
+      render: (sale: ISale) => {
+        if (sale.status === 'canceled') {
           return (
-            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-              Processada
+            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+              Cancelada
             </span>
           );
         }
 
+        if (!sale.commission) {
+          return (
+            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+              Não processada
+            </span>
+          );
+        }
+
+        if (typeof sale.commission === 'object') {
+          if (sale.commission.isPaid) {
+            return (
+              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                Comissão Paga
+              </span>
+            );
+          } else {
+            return (
+              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                Comissão Pendente
+              </span>
+            );
+          }
+        }
+
         return (
           <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-            Pendente
+            Em Comissão
           </span>
         );
       }
@@ -318,8 +460,8 @@ const SalesPage: React.FC = () => {
       header: 'Ações',
       accessor: '_id',
       render: (sale: ISale) => (
-        <div className="flex space-x-2">
-          {!sale.commission && sale.status !== 'canceled' && (
+        <div className="flex space-x-1">
+          {canEditSale(sale) && (
             <>
               <Button
                 variant="primary"
@@ -328,14 +470,13 @@ const SalesPage: React.FC = () => {
                   e.stopPropagation();
                   handleOpenFormModal(sale);
                 }}
-                className="flex items-center"
+                className="flex items-center px-2 py-1"
+                title="Editar venda"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
-                Editar
               </Button>
-
               <Button
                 variant="danger"
                 size="sm"
@@ -343,19 +484,18 @@ const SalesPage: React.FC = () => {
                   e.stopPropagation();
                   handleDeleteSale(sale._id);
                 }}
-                className="flex items-center"
+                className="flex items-center px-2 py-1"
+                title="Excluir venda"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-                Excluir
               </Button>
             </>
           )}
-
-          {(sale.commission || sale.status === 'canceled') && (
-            <span className="text-xs text-gray-500">
-              {sale.status === 'canceled' ? 'Venda cancelada' : 'Processada em comissão'}
+          {!canEditSale(sale) && (
+            <span className="text-xs text-gray-500 px-2 py-1">
+              {sale.status === 'canceled' ? 'Cancelada' : 'Comissão Paga'}
             </span>
           )}
         </div>
@@ -367,8 +507,15 @@ const SalesPage: React.FC = () => {
     if (sale.status === 'canceled') {
       return 'bg-red-50 hover:bg-red-100';
     }
-    if (sale.source === 'editora') {
+
+    if (sale.paymentStatus === 'completed') {
       return 'bg-green-50 hover:bg-green-100';
+    }
+    if (sale.paymentStatus === 'partial') {
+      return 'bg-blue-50 hover:bg-blue-100';
+    }
+    if (sale.source === 'editora') {
+      return 'bg-gray-50 hover:bg-gray-100';
     }
     return '';
   };
@@ -413,7 +560,9 @@ const SalesPage: React.FC = () => {
         />
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
+      {/* Cards de Estatísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
@@ -424,8 +573,12 @@ const SalesPage: React.FC = () => {
             <div>
               <p className="text-sm text-gray-500">Total de Registros</p>
               <p className="text-xl font-bold text-gray-900">
-                {statusStats.total} vendas <span></span>
-                <span className="text-sm text-red-500 font-normal">({statusStats.canceled} canceladas)</span>
+
+
+                {statusStats.total} vendas
+                <span className="text-sm text-red-500 font-normal ml-2">
+                  ({statusStats.canceled} canceladas)
+                </span>
               </p>
             </div>
           </div>
@@ -449,7 +602,8 @@ const SalesPage: React.FC = () => {
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-purple-100 text-purple-600 mr-4">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
             </div>
             <div>
@@ -458,12 +612,38 @@ const SalesPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Novo card para status de pagamento */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-3 rounded-full bg-yellow-100 text-yellow-600 mr-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Status Pagamento</p>
+              <div className="text-sm">
+                <div className="flex justify-between">
+                  <span className="text-green-600">✅ {statusStats.completed}</span>
+                  <span className="text-blue-600">🔄 {statusStats.partial}</span>
+                  <span className="text-yellow-600">⏳ {statusStats.pending}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+
+        <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
           <div className="md:col-span-2">
-            <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+
+            <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+              Buscar
+            </label>
             <div className="relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -474,7 +654,7 @@ const SalesPage: React.FC = () => {
                 type="text"
                 id="search"
                 className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
-                placeholder="Buscar por livro..."
+                placeholder="Buscar por livro ou autor..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -482,7 +662,10 @@ const SalesPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 mb-1">Data Inicial</label>
+
+            <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 mb-1">
+              Data Inicial
+            </label>
             <input
               id="start-date"
               type="date"
@@ -493,7 +676,10 @@ const SalesPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 mb-1">Data Final</label>
+
+            <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 mb-1">
+              Data Final
+            </label>
             <input
               id="end-date"
               type="date"
@@ -504,7 +690,10 @@ const SalesPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="source-filter" className="block text-sm font-medium text-gray-700 mb-1">Origem</label>
+
+            <label htmlFor="source-filter" className="block text-sm font-medium text-gray-700 mb-1">
+              Origem
+            </label>
             <select
               id="source-filter"
               className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
@@ -529,6 +718,24 @@ const SalesPage: React.FC = () => {
               <option value="pending">Pendentes</option>
               <option value="processed">Processados</option>
               <option value="canceled">Cancelados</option>
+            </select>
+          </div>
+
+          {/* Novo filtro para status de pagamento */}
+          <div>
+            <label htmlFor="payment-status-filter" className="block text-sm font-medium text-gray-700 mb-1">
+              Status Pagamento
+            </label>
+            <select
+              id="payment-status-filter"
+              className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              value={paymentStatusFilter}
+              onChange={(e) => setPaymentStatusFilter(e.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="pending">⏳ Pendente</option>
+              <option value="partial">🔄 Parcial</option>
+              <option value="completed">✅ Pago</option>
             </select>
           </div>
         </div>
@@ -561,7 +768,11 @@ const SalesPage: React.FC = () => {
               <span className="font-medium">Legenda:</span>
               <span className="inline-flex items-center ml-4">
                 <span className="w-3 h-3 bg-green-50 border border-green-200 rounded-full mr-1"></span>
-                Vendas da Editora
+                Pagamento Completo
+              </span>
+              <span className="inline-flex items-center ml-4">
+                <span className="w-3 h-3 bg-blue-50 border border-blue-200 rounded-full mr-1"></span>
+                Pagamento Parcial
               </span>
               <span className="inline-flex items-center ml-4">
                 <span className="w-3 h-3 bg-red-50 border border-red-200 rounded-full mr-1"></span>

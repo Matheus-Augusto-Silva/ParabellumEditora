@@ -3,7 +3,7 @@ import asyncHandler from 'express-async-handler';
 import Sale from '../models/Sale';
 import Book from '../models/Book';
 import Customer from '../models/Customer';
-import { ISaleStats } from '../types';
+import Commission from '../models/Commission';
 import csv from 'csv-parser';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
@@ -157,48 +157,75 @@ export const createSale = asyncHandler(async (req: Request, res: Response): Prom
 });
 
 export const updateSale = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { book, platform, saleDate, quantity, salePrice } = req.body;
+  const sale = await Sale.findById(req.params.id).populate('commission');
 
-  const sale = await Sale.findById(req.params.id);
-
-  if (sale) {
-    if (sale.isProcessed) {
-      res.status(400);
-      throw new Error('Não é possível editar uma venda que já foi processada em uma comissão');
-    }
-
-    if (book && book !== sale.book.toString()) {
-      const bookExists = await Book.findById(book);
-      if (!bookExists) {
-        res.status(400);
-        throw new Error('Livro não encontrado');
-      }
-    }
-
-    sale.book = book || sale.book;
-    sale.platform = platform || sale.platform;
-    if (saleDate) {
-      sale.saleDate = new Date(saleDate);
-    }
-    sale.quantity = quantity !== undefined ? quantity : sale.quantity;
-    sale.salePrice = salePrice !== undefined ? salePrice : sale.salePrice;
-
-    const updatedSale = await sale.save();
-
-    const populatedSale = await Sale.findById(updatedSale._id)
-      .populate({
-        path: 'book',
-        populate: {
-          path: 'author',
-          select: 'name commissionRate'
-        }
-      });
-
-    res.json(populatedSale);
-  } else {
+  if (!sale) {
     res.status(404);
     throw new Error('Venda não encontrada');
   }
+
+  if (sale.commission && typeof sale.commission === 'object' && sale.commission.isPaid) {
+    res.status(400);
+    throw new Error('Não é possível editar uma venda cuja comissão já foi paga');
+  }
+
+  const {
+    book,
+    platform,
+    saleDate,
+    quantity,
+    salePrice,
+    orderNumber,
+    customerName,
+    customerEmail,
+    customerPhone,
+    source,
+    status,
+    paymentStatus
+  } = req.body;
+
+  if (sale.commission && typeof sale.commission === 'object' && !sale.commission.isPaid) {
+    const commissionId = typeof sale.commission === 'object' ? sale.commission._id : sale.commission;
+
+    await Commission.findByIdAndUpdate(
+      commissionId,
+      { $pull: { sales: sale._id } }
+    );
+
+    sale.commission = undefined;
+    sale.isProcessed = false;
+  }
+
+  if (book) sale.book = book;
+  if (platform) sale.platform = platform;
+  if (saleDate) sale.saleDate = saleDate;
+  if (quantity) sale.quantity = quantity;
+  if (salePrice) sale.salePrice = salePrice;
+  if (orderNumber !== undefined) sale.orderNumber = orderNumber;
+  if (customerName !== undefined) sale.customerName = customerName;
+  if (customerEmail !== undefined) sale.customerEmail = customerEmail;
+  if (customerPhone !== undefined) sale.customerPhone = customerPhone;
+  if (source) sale.source = source;
+  if (status) sale.status = status;
+  if (paymentStatus) sale.paymentStatus = paymentStatus;
+
+  const updatedSale = await sale.save();
+
+  await updatedSale.populate([
+    {
+      path: 'book',
+      populate: {
+        path: 'author',
+        select: 'name'
+      }
+    },
+    {
+      path: 'customer',
+      select: 'name email phone'
+    }
+  ]);
+
+  res.json(updatedSale);
 });
 
 export const getSalesStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -749,20 +776,32 @@ export const importSales = asyncHandler(async (req: Request & { file?: Express.M
 });
 
 export const deleteSale = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const sale = await Sale.findById(req.params.id);
+  const sale = await Sale.findById(req.params.id).populate('commission');
 
   if (!sale) {
     res.status(404);
     throw new Error('Venda não encontrada');
   }
 
-  if (sale.isProcessed) {
+  if (sale.commission && typeof sale.commission === 'object' && sale.commission.isPaid) {
     res.status(400);
-    throw new Error('Não é possível excluir uma venda que já foi processada em uma comissão');
+    throw new Error('Não é possível excluir uma venda cuja comissão já foi paga');
   }
 
-  await sale.remove();
-  res.json({ message: 'Venda removida com sucesso' });
+  if (sale.commission) {
+    const commissionId = typeof sale.commission === 'object' ? sale.commission._id : sale.commission;
+
+    await Commission.findByIdAndUpdate(
+      commissionId,
+      { $pull: { sales: sale._id } }
+    );
+  }
+
+  await Sale.findByIdAndDelete(req.params.id);
+
+  res.json({
+    message: 'Venda excluída com sucesso'
+  });
 });
 
 export const getFilteredSales = async (req: Request, res: Response): Promise<void> => {

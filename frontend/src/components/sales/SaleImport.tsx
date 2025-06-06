@@ -32,7 +32,6 @@ const SaleImport: React.FC<{
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
 
-      // Lógica melhorada para detecção pelo nome do arquivo
       if (selectedFile.name.toLowerCase().includes('pedidosexport') ||
         selectedFile.name.toLowerCase().includes('woocommerce') ||
         selectedFile.name.toLowerCase().includes('pedido') ||
@@ -73,8 +72,6 @@ const SaleImport: React.FC<{
       formData.append('allowZeroPrices', allowZeroPrices ? 'true' : 'false');
       formData.append('importCustomers', importCustomers ? 'true' : 'false');
       formData.append('autoDetectSource', autoDetectSource ? 'true' : 'false');
-
-      console.log('Enviando arquivo:', file.name, 'tamanho:', file.size);
 
       const response = await axios.post('http://localhost:5000/api/sales/import', formData, {
         headers: {

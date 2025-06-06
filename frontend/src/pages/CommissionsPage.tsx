@@ -27,9 +27,6 @@ const CommissionsPage: React.FC = () => {
         getPaidCommissions()
       ]);
 
-      console.log("Pending commissions raw data:", pendingData);
-      console.log("Paid commissions raw data:", paidData);
-
       const pendingArray = pendingData && pendingData.pendingCommissions
         ? pendingData.pendingCommissions
         : [];
@@ -37,9 +34,6 @@ const CommissionsPage: React.FC = () => {
       const paidArray = paidData && paidData.paidCommissions
         ? paidData.paidCommissions
         : [];
-
-      console.log("Setting pending commissions:", pendingArray);
-      console.log("Setting paid commissions:", paidArray);
 
       setPendingCommissions(pendingArray);
       setPaidCommissions(paidArray);

@@ -166,41 +166,54 @@ export const processCommission = async (
   endDate: string
 ) => {
   try {
-    const sales = await getSalesByAuthorAndDateRange(authorId, startDate, endDate);
 
-    if (sales.length === 0) {
-      throw new Error('Nenhuma venda encontrada para o período selecionado.');
-    }
-
-    const calculation = calculateLocalCommission(sales, authorId, startDate, endDate);
-
-    const savedCommission = await saveCommission({
-      authorId: calculation.authorId,
-      startDate: calculation.startDate,
-      endDate: calculation.endDate,
-      commissionAmount: calculation.authorCommission,
-      totalSales: calculation.totalSales,
-      salesCount: sales.length,
-      salesIds: calculation.salesIds
+    const response = await api.post(`/commissions/author/${authorId}/calculate`, {
+      startDate,
+      endDate
     });
 
-    calculation.commission = {
-      commissionAmount: savedCommission.commissionAmount
+    return {
+      salesCount: response.data.salesCount,
+      commission: {
+        commissionAmount: response.data.commission.commissionAmount,
+        hasDividedCommissions: response.data.commission.hasDividedCommissions,
+        dividedCommissionDetails: response.data.commission.dividedCommissionDetails,
+        integralCommissionDetails: response.data.commission.integralCommissionDetails
+      },
+      authorId: response.data.authorId,
+      startDate: response.data.startDate,
+      endDate: response.data.endDate,
+      totalSales: response.data.totalSales,
+      totalQuantity: response.data.totalQuantity,
+      authorCommission: response.data.authorCommission,
+      publisherRevenue: response.data.publisherRevenue || 0,
+      partnerRevenue: response.data.partnerRevenue || 0,
+      detail: response.data.detail || {
+        parceira: {
+          sales: 0,
+          quantity: 0,
+          total: 0,
+          authorCommission: 0,
+          publisherRevenue: 0,
+          partnerRevenue: 0
+        },
+        editora: {
+          sales: 0,
+          quantity: 0,
+          total: 0,
+          authorCommission: 0,
+          publisherRevenue: 0
+        }
+      },
+      salesIds: response.data.salesIds
     };
-
-    return calculation;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao processar comissão:', error);
-    throw error;
-  }
-};
 
-export const saveCommission = async (commissionData: ICommissionSaveRequest) => {
-  try {
-    const response = await api.post(`${ENDPOINT}`, commissionData);
-    return response.data;
-  } catch (error) {
-    console.error('Erro ao salvar comissão:', error);
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+
     throw error;
   }
 };
@@ -208,7 +221,6 @@ export const saveCommission = async (commissionData: ICommissionSaveRequest) => 
 export const getPendingCommissions = async (): Promise<IPendingCommissions> => {
   try {
     const response = await api.get(`${ENDPOINT}/pendingCommissions`);
-    console.log("Resposta pendingCommissions:", response.data);
     return response.data;
   } catch (error) {
     console.error('Erro ao buscar comissões pendentes:', error);
@@ -219,7 +231,6 @@ export const getPendingCommissions = async (): Promise<IPendingCommissions> => {
 export const getPaidCommissions = async (): Promise<IPaidCommissions> => {
   try {
     const response = await api.get(`${ENDPOINT}/paidCommissions`);
-    console.log("Resposta paidCommissions:", response.data);
     return response.data;
   } catch (error) {
     console.error('Erro ao buscar comissões pagas:', error);

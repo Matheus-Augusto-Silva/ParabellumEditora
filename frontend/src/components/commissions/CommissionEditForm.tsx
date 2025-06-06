@@ -31,7 +31,6 @@ const CommissionEditForm: React.FC<CommissionEditFormProps> = ({
     const fetchCommission = async () => {
       try {
         const data = await getCommissionById(commissionId);
-        console.log("Commission loaded:", data);
         setCommission(data);
         setCommissionAmount(data.commissionAmount.toString());
         setCommissionRate(data.commissionRate ? data.commissionRate.toString() : '10');

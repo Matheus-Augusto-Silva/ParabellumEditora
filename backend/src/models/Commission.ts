@@ -48,7 +48,26 @@ const commissionSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Sale'
       }
-    ]
+    ],
+    hasDividedCommissions: {
+      type: Boolean,
+      default: false
+    },
+    dividedCommissionDetails: [{
+      bookTitle: String,
+      numberOfAuthors: Number,
+      coAuthors: [String],
+      saleTotal: Number,
+      originalRate: Number,
+      dividedRate: String,
+      commission: String
+    }],
+    integralCommissionDetails: [{
+      bookTitle: String,
+      saleTotal: Number,
+      rate: Number,
+      commission: String
+    }]
   },
   {
     timestamps: true
